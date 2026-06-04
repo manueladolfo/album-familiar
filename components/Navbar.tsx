@@ -1,0 +1,159 @@
+"use client";
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+
+export default function Navbar() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Búsqueda
+  const [searchVal, setSearchVal] = useState<string>("");
+
+  useEffect(() => {
+    setSearchVal(searchParams.get("search") || "");
+  }, [searchParams]);
+
+  const handleSearchChange = (val: string) => {
+    setSearchVal(val);
+    const params = new URLSearchParams(window.location.search);
+    if (val) {
+      params.set("search", val);
+    } else {
+      params.delete("search");
+    }
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  // Dropdown de usuario
+  const [showDropdown, setShowDropdown] = useState<boolean>(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [userEmail, setUserEmail] = useState<string>("Usuario Familiar");
+
+  useEffect(() => {
+    const email = localStorage.getItem("family_album_user_email");
+    if (email) {
+      setUserEmail(email);
+    }
+  }, []);
+
+  // Cerrar el dropdown al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Bloquear pantalla (mantiene el email para pre-relleno en login)
+  const handleLockScreen = () => {
+    localStorage.removeItem("family_album_session");
+    setShowDropdown(false);
+    router.push("/login");
+  };
+
+  // Cambiar de usuario (limpia sesión y email por completo)
+  const handleChangeUser = () => {
+    localStorage.removeItem("family_album_session");
+    localStorage.removeItem("family_album_user_email");
+    setShowDropdown(false);
+    router.push("/login");
+  };
+
+  const getTitle = (path: string) => {
+    if (path === "/") return "Dashboard";
+    if (path === "/photos") return "Biblioteca de Fotos";
+    if (path === "/trash") return "Papelera";
+    if (path.startsWith("/album/")) {
+      const albumId = path.split("/").pop();
+      return `Álbum #${albumId}`;
+    }
+    return "Álbum Familiar";
+  };
+
+  return (
+    <header className="h-16 fixed top-0 right-0 left-[280px] bg-brand-cream/90 backdrop-blur-md border-b border-brand-navy/10 flex items-center justify-between px-8 z-10">
+      {/* Título de la sección */}
+      <h2 className="text-lg font-medium text-brand-navy tracking-tight">
+        {getTitle(pathname)}
+      </h2>
+
+      {/* Acciones de la barra */}
+      <div className="flex items-center gap-4 bg-transparent">
+        {/* Buscador */}
+        <div className="relative hidden md:block bg-transparent">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none bg-transparent">
+            <svg
+              className="w-4 h-4 text-brand-navy/40"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.5"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+          </span>
+          <input
+            type="search"
+            value={searchVal}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Buscar recuerdos..."
+            className="w-64 pl-9 pr-2 py-1.5 border-b border-brand-navy/10 bg-transparent text-xs text-brand-navy placeholder-brand-navy/40 focus:outline-none focus:border-brand-navy transition-all"
+          />
+        </div>
+
+        {/* Info de Usuario / Avatar clickable */}
+        <div className="relative bg-transparent" ref={dropdownRef}>
+          <button
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="w-8 h-8 rounded-full border border-brand-navy/20 text-brand-navy flex items-center justify-center bg-transparent select-none cursor-pointer hover:border-brand-navy/55 transition-colors focus:outline-none"
+            title="Opciones de la cuenta"
+          >
+            <svg className="w-4 h-4 text-brand-navy/70" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+            </svg>
+          </button>
+
+          {/* Dropdown flotante premium */}
+          {showDropdown && (
+            <div className="absolute right-0 mt-2.5 w-60 bg-brand-cream border border-brand-navy/15 rounded-xs p-4 shadow-xl z-30 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="space-y-0.5 border-b border-brand-navy/5 pb-2.5 bg-transparent">
+                <p className="text-[10px] uppercase font-bold tracking-wider text-brand-navy/40">
+                  Usuario Activo
+                </p>
+                <p className="text-xs font-semibold text-brand-navy truncate bg-transparent">
+                  {userEmail}
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5 bg-transparent">
+                <button
+                  onClick={handleLockScreen}
+                  className="w-full text-left py-1.5 px-2 hover:bg-brand-navy/5 text-brand-navy hover:text-brand-timber text-xs font-medium rounded-xs transition-colors cursor-pointer bg-transparent"
+                >
+                  Bloquear pantalla
+                </button>
+                <button
+                  onClick={handleChangeUser}
+                  className="w-full text-left py-1.5 px-2 hover:bg-brand-navy/5 text-brand-navy hover:text-red-600 text-xs font-medium rounded-xs transition-colors cursor-pointer bg-transparent"
+                >
+                  Cambiar de usuario
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
