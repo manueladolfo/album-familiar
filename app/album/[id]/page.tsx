@@ -177,8 +177,8 @@ export default function AlbumPage({ params }: PageProps) {
         });
 
       setPhotos(albumPhotos);
-    } catch (err: any) {
-      console.error("Error al cargar fotos del álbum:", err.message);
+    } catch (err) {
+      console.error("Error al cargar fotos del álbum:", err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -328,8 +328,8 @@ export default function AlbumPage({ params }: PageProps) {
         });
         uploadSuccess = true;
         await fetchAlbumData();
-      } catch (err: any) {
-        console.warn("Fallo al subir a Supabase. Activando almacenamiento local de respaldo...", err.message);
+      } catch (err) {
+        console.warn("Fallo al subir a Supabase. Activando almacenamiento local de respaldo...", err instanceof Error ? err.message : String(err));
       }
 
       // Si no se subió a Supabase, guardamos localmente como fallback
@@ -369,11 +369,11 @@ export default function AlbumPage({ params }: PageProps) {
               type: "success",
               message: "¡Foto optimizada y agregada localmente a este álbum!",
             });
-          } catch (fallbackErr: any) {
+          } catch (fallbackErr) {
             console.error("Fallo al guardar en LocalStorage:", fallbackErr);
             setUploadStatus({
               type: "error",
-              message: `Fallo al guardar la foto localmente: ${fallbackErr.message}`,
+              message: `Fallo al guardar la foto localmente: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`,
             });
           } finally {
             await fetchAlbumData();
@@ -388,11 +388,11 @@ export default function AlbumPage({ params }: PageProps) {
       // Notificar cambio al Sidebar para refrescar contadores
       window.dispatchEvent(new CustomEvent("photo-moved"));
 
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error general en el proceso de subida:", error);
       setUploadStatus({
         type: "error",
-        message: error.message || "Error al procesar la imagen.",
+        message: error instanceof Error ? error.message : "Error al procesar la imagen.",
       });
       setUploading(false);
     }
@@ -439,7 +439,7 @@ export default function AlbumPage({ params }: PageProps) {
             {albumName}
           </h1>
           <p className="text-[11px] text-brand-navy/55 bg-transparent">
-            Álbum familiar con identificador "{id}" • {filteredPhotos.length} {filteredPhotos.length === 1 ? "foto" : "fotos"}
+            Álbum familiar con identificador &quot;{id}&quot; • {filteredPhotos.length} {filteredPhotos.length === 1 ? "foto" : "fotos"}
             {searchQuery && ` (filtrado de un total de ${photos.length})`}
           </p>
         </div>

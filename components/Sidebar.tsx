@@ -88,8 +88,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
       // 1. Intentar registrar en Supabase
       const { error } = await supabase.from("albums").insert(newAlbum);
       if (error) throw error;
-    } catch (err: any) {
-      console.warn("Fallo al crear álbum en Supabase (RLS). Guardando en LocalStorage fallback...", err.message);
+    } catch (err) {
+      console.warn("Fallo al crear álbum en Supabase (RLS). Guardando en LocalStorage fallback...", err instanceof Error ? err.message : String(err));
     } finally {
       // 2. Guardar localmente
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
@@ -121,14 +121,14 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           .eq("id", albumId);
         if (error) throw error;
       }
-    } catch (err: any) {
-      console.warn("Fallo al renombrar álbum en Supabase (RLS). Guardando en LocalStorage fallback...", err.message);
+    } catch (err) {
+      console.warn("Fallo al renombrar álbum en Supabase (RLS). Guardando en LocalStorage fallback...", err instanceof Error ? err.message : String(err));
     } finally {
       // 2. Renombrar en LocalStorage
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
       if (localAlbumsJson) {
         let localAlbums = JSON.parse(localAlbumsJson);
-        localAlbums = localAlbums.map((a: any) =>
+        localAlbums = localAlbums.map((a: AlbumItem) =>
           a.id === albumId ? { ...a, name: editingAlbumName.trim() } : a
         );
         localStorage.setItem("family_album_local_albums", JSON.stringify(localAlbums));
@@ -149,14 +149,14 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         const { error } = await supabase.from("albums").delete().eq("id", albumId);
         if (error) throw error;
       }
-    } catch (err: any) {
-      console.warn("Fallo al eliminar álbum en Supabase (RLS). Continuando localmente...", err.message);
+    } catch (err) {
+      console.warn("Fallo al eliminar álbum en Supabase (RLS). Continuando localmente...", err instanceof Error ? err.message : String(err));
     } finally {
       // 2. Eliminar de LocalStorage
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
       if (localAlbumsJson) {
         let localAlbums = JSON.parse(localAlbumsJson);
-        localAlbums = localAlbums.filter((a: any) => a.id !== albumId);
+        localAlbums = localAlbums.filter((a: AlbumItem) => a.id !== albumId);
         localStorage.setItem("family_album_local_albums", JSON.stringify(localAlbums));
       }
 
@@ -234,7 +234,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           setAlbums(defaultAlbums);
         }
       }
-    } catch (err) {
+    } catch {
       console.warn("Fallo al leer álbumes de Supabase (posible RLS). Cargando localmente...");
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
       if (localAlbumsJson) {
@@ -290,7 +290,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         if (error) throw error;
         console.log("Actualizado en Supabase correctamente");
       }
-    } catch (err) {
+    } catch {
       console.warn("Fallo al actualizar en Supabase (RLS). Guardando en LocalStorage fallback...");
     } finally {
       // 2. Persistir en LocalStorage como fallback siempre (para asegurar reactividad local instantánea)

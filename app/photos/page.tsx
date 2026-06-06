@@ -86,7 +86,7 @@ export default function PhotosPage() {
         if (error) throw error;
         console.log("Actualizado en Supabase correctamente");
       }
-    } catch (err) {
+    } catch {
       console.warn("Fallo al actualizar en Supabase (RLS). Guardando en LocalStorage fallback...");
     } finally {
       const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
@@ -222,8 +222,8 @@ export default function PhotosPage() {
         });
 
       setPhotos(activePhotos);
-    } catch (error: any) {
-      console.error("Error al cargar fotos combinadas:", error.message);
+    } catch (error) {
+      console.error("Error al cargar fotos combinadas:", error instanceof Error ? error.message : String(error));
     } finally {
       setLoading(false);
     }
@@ -390,8 +390,8 @@ export default function PhotosPage() {
         });
         uploadSuccess = true;
         await fetchPhotos();
-      } catch (err: any) {
-        console.warn("Fallo al subir a Supabase. Activando almacenamiento local de respaldo...", err.message);
+      } catch (err) {
+        console.warn("Fallo al subir a Supabase. Activando almacenamiento local de respaldo...", err instanceof Error ? err.message : String(err));
       }
 
       // Si no se subió a Supabase, guardamos localmente como fallback
@@ -428,11 +428,11 @@ export default function PhotosPage() {
               type: "success",
               message: "¡Foto optimizada y guardada localmente (almacenamiento del navegador)!",
             });
-          } catch (fallbackErr: any) {
+          } catch (fallbackErr) {
             console.error("Fallo al guardar en LocalStorage:", fallbackErr);
             setUploadStatus({
               type: "error",
-              message: `Fallo al guardar la foto localmente: ${fallbackErr.message}`,
+              message: `Fallo al guardar la foto localmente: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`,
             });
           } finally {
             await fetchPhotos();
@@ -444,11 +444,11 @@ export default function PhotosPage() {
         setUploading(false);
       }
 
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error general en el proceso de subida:", error);
       setUploadStatus({
         type: "error",
-        message: error.message || "Error al procesar la imagen.",
+        message: error instanceof Error ? error.message : "Error al procesar la imagen.",
       });
       setUploading(false);
     }

@@ -12,6 +12,7 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
   const [searchVal, setSearchVal] = useState<string>("");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearchVal(searchParams.get("search") || "");
   }, [searchParams]);
 
@@ -34,6 +35,7 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
   useEffect(() => {
     const email = localStorage.getItem("family_album_user_email");
     if (email) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUserEmail(email);
     }
   }, []);

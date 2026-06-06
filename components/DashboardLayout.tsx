@@ -5,6 +5,18 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
 
+interface AlbumItem {
+  id: string;
+  name: string;
+}
+
+interface LocalPhotoItem {
+  name: string;
+  url: string;
+  album_id?: string | null;
+  status?: string | null;
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -46,7 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           const idMap: Record<string, string> = {};
           let needsMigration = false;
 
-          localAlbums = localAlbums.map((a: any) => {
+          localAlbums = localAlbums.map((a: AlbumItem) => {
             if (!uuidRegex.test(a.id)) {
               needsMigration = true;
               let newId = "";
@@ -84,7 +96,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const localPhotosJson = localStorage.getItem("family_album_local_photos");
             if (localPhotosJson) {
               let localPhotos = JSON.parse(localPhotosJson);
-              localPhotos = localPhotos.map((p: any) => {
+              localPhotos = localPhotos.map((p: LocalPhotoItem) => {
                 if (p.album_id && idMap[p.album_id]) {
                   return { ...p, album_id: idMap[p.album_id] };
                 }

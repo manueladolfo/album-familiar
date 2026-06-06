@@ -21,6 +21,15 @@ interface PersonProfile {
   tags: string[]; // Claves para simular búsqueda inteligente por concordancia
 }
 
+interface LocalPhotoItem {
+  name: string;
+  url: string;
+  created_at?: string | null;
+  album_id?: string | null;
+  status?: string | null;
+  title?: string;
+}
+
 const SAMPLE_PHOTOS: SamplePhoto[] = [
   {
     id: "sample_picnic_1988",
@@ -158,8 +167,8 @@ export default function Home() {
   const [people, setPeople] = useState<PersonProfile[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<PersonProfile | null>(null);
   const [taggedPhotos, setTaggedPhotos] = useState<Record<string, string[]>>({}); // map of personId -> list of photo names
-  const [unassignedPhotos, setUnassignedPhotos] = useState<any[]>([]);
-  const [suggestedPhotos, setSuggestedPhotos] = useState<any[]>([]);
+  const [unassignedPhotos, setUnassignedPhotos] = useState<LocalPhotoItem[]>([]);
+  const [suggestedPhotos, setSuggestedPhotos] = useState<LocalPhotoItem[]>([]);
 
   // Inicialización de música, personas e importados
   useEffect(() => {
@@ -207,7 +216,7 @@ export default function Home() {
     const loadImported = () => {
       const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
       const localPhotos = JSON.parse(localPhotosJson);
-      setImportedPhotos(localPhotos.map((p: any) => p.name));
+      setImportedPhotos(localPhotos.map((p: LocalPhotoItem) => p.name));
     };
 
     loadImported();
@@ -277,15 +286,15 @@ export default function Home() {
     if (selectedPerson) {
       const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
       const localPhotos = JSON.parse(localPhotosJson);
-      const activeLocalPhotos = localPhotos.filter((p: any) => p.status !== "trash");
+      const activeLocalPhotos: LocalPhotoItem[] = localPhotos.filter((p: LocalPhotoItem) => p.status !== "trash");
 
       // Fotos ya asociadas
       const assignedNames = taggedPhotos[selectedPerson.id] || [];
-      const assigned = activeLocalPhotos.filter((p: any) => assignedNames.includes(p.name));
+      const assigned = activeLocalPhotos.filter((p: LocalPhotoItem) => assignedNames.includes(p.name));
 
       // Buscar sugerencias (fotos no asignadas pero que tienen tags en común con el perfil)
-      const unassigned = activeLocalPhotos.filter((p: any) => !assignedNames.includes(p.name));
-      const suggestions = unassigned.filter((p: any) => {
+      const unassigned = activeLocalPhotos.filter((p: LocalPhotoItem) => !assignedNames.includes(p.name));
+      const suggestions = unassigned.filter((p: LocalPhotoItem) => {
         const titleLower = (p.title || p.name).toLowerCase();
         // Verificar si contiene alguna palabra clave del perfil
         return selectedPerson.tags.some(tag => titleLower.includes(tag.toLowerCase()));
@@ -345,7 +354,7 @@ export default function Home() {
       const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
 
       SAMPLE_PHOTOS.forEach((photo) => {
-        if (!localPhotos.some((p: any) => p.name === photo.name)) {
+        if (!localPhotos.some((p: LocalPhotoItem) => p.name === photo.name)) {
           localPhotos.push({
             name: photo.name,
             url: photo.url,
@@ -360,7 +369,7 @@ export default function Home() {
 
       // Foto en papelera
       const trashPhotoName = "sample_trash_photo.webp";
-      if (!localPhotos.some((p: any) => p.name === trashPhotoName)) {
+      if (!localPhotos.some((p: LocalPhotoItem) => p.name === trashPhotoName)) {
         localPhotos.push({
           name: trashPhotoName,
           url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&auto=format&fit=crop",
@@ -405,7 +414,7 @@ export default function Home() {
       const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
       const localPhotos = JSON.parse(localPhotosJson);
 
-      if (localPhotos.some((p: any) => p.name === photo.name)) {
+      if (localPhotos.some((p: LocalPhotoItem) => p.name === photo.name)) {
         setFeedback({ type: "error", text: "Este recuerdo ya está importado." });
         return;
       }
@@ -816,9 +825,9 @@ export default function Home() {
                 {(() => {
                   const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
                   const localPhotos = JSON.parse(localPhotosJson);
-                  const activeLocalPhotos = localPhotos.filter((p: any) => p.status !== "trash");
+                  const activeLocalPhotos = localPhotos.filter((p: LocalPhotoItem) => p.status !== "trash");
                   const assignedNames = taggedPhotos[selectedPerson.id] || [];
-                  const assigned = activeLocalPhotos.filter((p: any) => assignedNames.includes(p.name));
+                  const assigned = activeLocalPhotos.filter((p: LocalPhotoItem) => assignedNames.includes(p.name));
 
                   if (assigned.length === 0) {
                     return (
@@ -828,7 +837,7 @@ export default function Home() {
 
                   return (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      {assigned.map((photo: any) => (
+                      {assigned.map((photo: LocalPhotoItem) => (
                         <div key={photo.name} className="group relative aspect-square bg-brand-navy/5 rounded-xs overflow-hidden border border-brand-navy/10">
                           <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
                           <button
@@ -859,7 +868,7 @@ export default function Home() {
                   </div>
                   
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {suggestedPhotos.map((photo: any) => (
+                    {suggestedPhotos.map((photo: LocalPhotoItem) => (
                       <div key={photo.name} className="group relative aspect-square bg-brand-navy/5 border border-brand-navy/10 rounded-xs overflow-hidden flex flex-col justify-between">
                         <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
                         <div className="absolute inset-x-0 bottom-0 bg-brand-navy/80 backdrop-blur-xs p-2 flex flex-col gap-1.5 z-10">
@@ -883,9 +892,9 @@ export default function Home() {
                 {(() => {
                   const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
                   const localPhotos = JSON.parse(localPhotosJson);
-                  const activeLocalPhotos = localPhotos.filter((p: any) => p.status !== "trash");
+                  const activeLocalPhotos = localPhotos.filter((p: LocalPhotoItem) => p.status !== "trash");
                   const assignedNames = taggedPhotos[selectedPerson.id] || [];
-                  const manualOptions = activeLocalPhotos.filter((p: any) => !assignedNames.includes(p.name));
+                  const manualOptions = activeLocalPhotos.filter((p: LocalPhotoItem) => !assignedNames.includes(p.name));
 
                   if (manualOptions.length === 0) {
                     return (
@@ -895,7 +904,7 @@ export default function Home() {
 
                   return (
                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin max-w-full">
-                      {manualOptions.map((photo: any) => (
+                      {manualOptions.map((photo: LocalPhotoItem) => (
                         <div key={photo.name} className="w-24 h-24 relative flex-shrink-0 border border-brand-navy/10 rounded-xs overflow-hidden group">
                           <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
                           <button
