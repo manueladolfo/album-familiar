@@ -53,6 +53,56 @@ export default function PhotosPage() {
     window.dispatchEvent(new CustomEvent("photo-moved"));
   };
 
+  // Estado y manejadores para el menú de asignación rápida de álbum
+  const [openAlbumDropdownPhoto, setOpenAlbumDropdownPhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        target &&
+        !target.closest("[data-album-dropdown-trigger]") &&
+        !target.closest("[data-album-dropdown]")
+      ) {
+        setOpenAlbumDropdownPhoto(null);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => {
+      document.removeEventListener("click", handleClickOutside);
+    };
+  }, []);
+
+  const handleAddPhotoToAlbum = async (photoName: string, albumId: string | null) => {
+    try {
+      console.log(`Asociando foto ${photoName} al álbum ${albumId}`);
+
+      if (isValidUUID(photoName) && (albumId === null || isValidUUID(albumId))) {
+        const { error } = await supabase
+          .from("photos")
+          .update({ album_id: albumId })
+          .eq("id", photoName);
+
+        if (error) throw error;
+        console.log("Actualizado en Supabase correctamente");
+      }
+    } catch (err) {
+      console.warn("Fallo al actualizar en Supabase (RLS). Guardando en LocalStorage fallback...");
+    } finally {
+      const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+      const mappings = JSON.parse(mappingsJson);
+      mappings[photoName] = albumId;
+      localStorage.setItem("family_album_photo_mappings", JSON.stringify(mappings));
+
+      window.dispatchEvent(
+        new CustomEvent("photo-moved", {
+          detail: { photoId: photoName, albumId },
+        })
+      );
+      await fetchPhotos();
+    }
+  };
+
   // Cargar álbumes
   const fetchAlbums = async () => {
     try {
@@ -182,11 +232,16 @@ export default function PhotosPage() {
   useEffect(() => {
     fetchAlbums();
     fetchPhotos();
-
-    // Escuchar cambios globales de Drag & Drop o de actualización de fotos
+ 
+    // Escuchar cambios globales de Drag & Drop o de actualización de fotos y álbumes
     const handlePhotoMoved = () => fetchPhotos();
+    const handleRefreshAlbums = () => fetchAlbums();
     window.addEventListener("photo-moved", handlePhotoMoved);
-    return () => window.removeEventListener("photo-moved", handlePhotoMoved);
+    window.addEventListener("refresh-albums", handleRefreshAlbums);
+    return () => {
+      window.removeEventListener("photo-moved", handlePhotoMoved);
+      window.removeEventListener("refresh-albums", handleRefreshAlbums);
+    };
   }, []);
 
   // Comprimir imagen usando Canvas en el cliente (max 500px, WebP)
@@ -582,15 +637,59 @@ export default function PhotosPage() {
                   draggable
                   onDragStart={(e) => handlePhotoDragStart(e, photo.name)}
                   onClick={() => setActiveLightboxPhoto(originalUrl)}
-                  className="group relative aspect-square bg-brand-cream/50 rounded-xs overflow-hidden border border-brand-navy/10 hover:border-brand-navy transition-all duration-300 cursor-zoom-in active:cursor-grabbing select-none"
+                  className="group relative aspect-square bg-brand-cream/50 rounded-xs border border-brand-navy/10 hover:border-brand-navy transition-all duration-300 cursor-zoom-in active:cursor-grabbing select-none"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photo.url}
-                    alt={photo.name}
-                    className="w-full h-full object-cover border border-brand-navy/5 transition-transform duration-500 group-hover:scale-103"
-                    loading="lazy"
-                  />
+                  {/* Contenedor visual recortado para la imagen y el hover overlay */}
+                  <div className="absolute inset-0 rounded-xs overflow-hidden z-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.url}
+                      alt={photo.name}
+                      className="w-full h-full object-cover border border-brand-navy/5 transition-transform duration-500 group-hover:scale-103"
+                      loading="lazy"
+                    />
+
+                    {/* Hover overlay con desenfoque de cristal */}
+                    <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4">
+                      <div className="flex justify-end bg-transparent">
+                        {/* Botón de enviar a la papelera */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveToTrash(photo.name);
+                          }}
+                          className="p-2 border border-brand-cream/20 hover:bg-brand-cream/10 text-brand-cream rounded-xs transition-all"
+                          title="Mover a la papelera"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div className="bg-transparent space-y-2 text-left">
+                        <div className="bg-transparent">
+                          <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
+                            {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
+                          </p>
+                          <p className="text-brand-cream/70 text-[10px] mt-0.5">
+                            {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 bg-transparent">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveLightboxPhoto(originalUrl);
+                            }}
+                            className="flex-1 py-1.5 px-3 border border-brand-cream/30 hover:bg-brand-cream/10 text-brand-cream text-[11px] font-medium rounded-xs text-center transition-all cursor-pointer"
+                          >
+                            Ver
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Badge de álbum */}
                   {albumName && (
@@ -620,47 +719,59 @@ export default function PhotosPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                     </svg>
                   </button>
-                  
-                  {/* Hover overlay con desenfoque de cristal */}
-                  <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
-                    <div className="flex justify-end bg-transparent">
-                      {/* Botón de enviar a la papelera */}
+
+                  {/* Botón de Añadir a Álbum (Cruz/Más) */}
+                  <button
+                    data-album-dropdown-trigger
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenAlbumDropdownPhoto(openAlbumDropdownPhoto === photo.name ? null : photo.name);
+                    }}
+                    className="absolute top-3 right-11 z-20 p-1.5 rounded-full bg-brand-cream/90 backdrop-blur-xs border border-brand-navy/15 text-brand-navy hover:scale-105 transition-all cursor-pointer focus:outline-none"
+                    title="Añadir a un álbum..."
+                  >
+                    <svg className="w-3.5 h-3.5 text-brand-navy/60" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                  </button>
+
+                  {/* Menú Desplegable de Álbumes */}
+                  {openAlbumDropdownPhoto === photo.name && (
+                    <div
+                      data-album-dropdown
+                      className="absolute top-11 right-3 bg-brand-cream border border-brand-navy/25 rounded-xs p-2 shadow-xl z-30 flex flex-col gap-1 w-44 animate-in fade-in duration-150 cursor-default"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <p className="text-[9px] uppercase font-bold text-brand-navy/40 tracking-wider px-2 py-1 border-b border-brand-navy/5">
+                        Añadir al álbum
+                      </p>
+                      {albums.map((album) => (
+                        <button
+                          key={album.id}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setOpenAlbumDropdownPhoto(null);
+                            await handleAddPhotoToAlbum(photo.name, album.id);
+                          }}
+                          className={`w-full text-left text-[11px] font-medium py-1.5 px-2 hover:bg-brand-navy/5 rounded-xs transition-colors cursor-pointer ${
+                            photo.album_id === album.id ? "text-brand-timber font-semibold" : "text-brand-navy"
+                          }`}
+                        >
+                          {album.name} {photo.album_id === album.id ? "✓" : ""}
+                        </button>
+                      ))}
                       <button
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          moveToTrash(photo.name);
+                          setOpenAlbumDropdownPhoto(null);
+                          await handleAddPhotoToAlbum(photo.name, null);
                         }}
-                        className="p-2 border border-brand-cream/20 hover:bg-brand-cream/10 text-brand-cream rounded-xs transition-all"
-                        title="Mover a la papelera"
+                        className="w-full text-left text-[10px] font-bold text-red-600 py-1.5 px-2 hover:bg-red-50 rounded-xs transition-colors cursor-pointer border-t border-brand-navy/5"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
+                        Quitar del álbum
                       </button>
                     </div>
-
-                    <div className="bg-transparent space-y-2">
-                      <div className="bg-transparent">
-                        <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
-                          {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
-                        </p>
-                        <p className="text-brand-cream/70 text-[10px] mt-0.5">
-                          {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
-                        </p>
-                      </div>
-                      <div className="flex gap-2 bg-transparent">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveLightboxPhoto(originalUrl);
-                          }}
-                          className="flex-1 py-1.5 px-3 border border-brand-cream/30 hover:bg-brand-cream/10 text-brand-cream text-[11px] font-medium rounded-xs text-center transition-all cursor-pointer"
-                        >
-                          Ver Original
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}

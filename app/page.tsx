@@ -148,10 +148,10 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const musicTracks = [
-    { title: "Chill Memories Lofi", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
-    { title: "Sunset Waves Lofi", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
-    { title: "Midnight Coffee Lofi", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" },
-    { title: "Cozy Fireside Lofi", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3" }
+    { title: "Melodía Lofi del Amanecer (Tranquilo)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
+    { title: "Brisa Calma Lofi (Relajante)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3" },
+    { title: "Atardecer Lofi de Ensueño (Suave)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3" },
+    { title: "Nostalgia Lofi Nocturna (Calma)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3" }
   ];
 
   // Estados para Personas

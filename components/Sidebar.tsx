@@ -406,20 +406,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                 </svg>
                 Recientes
               </Link>
-              <Link
-                href="/map"
-                className={`flex items-center gap-3 py-1 text-xs font-medium transition-all ${
-                  pathname === "/map"
-                    ? "text-brand-navy font-semibold bg-transparent"
-                    : "text-brand-navy/60 hover:text-brand-navy bg-transparent"
-                }`}
-              >
-                <svg className="w-4 h-4 text-brand-navy/40" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Mapa
-              </Link>
             </div>
           )}
         </div>
