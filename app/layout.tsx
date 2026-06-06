@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -13,6 +13,12 @@ export const metadata: Metadata = {
   description: "Una aplicación para organizar, compartir y preservar recuerdos familiares.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -23,7 +29,7 @@ export default function RootLayout({
       lang="es"
       className={`${manrope.variable} h-full antialiased`}
     >
-      <body className={`${manrope.className} min-h-full bg-brand-cream text-brand-navy flex`}>
+      <body className={`${manrope.className} min-h-full w-full bg-brand-cream text-brand-navy flex flex-col overflow-x-hidden`}>
         <DashboardLayout>
           {children}
         </DashboardLayout>

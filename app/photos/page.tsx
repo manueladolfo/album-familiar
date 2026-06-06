@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 
 interface PhotoItem {
@@ -274,10 +275,10 @@ export default function PhotosPage() {
           throw thumbError;
         }
 
-        // 3. Registrar en base de datos
+        // 3. Registrar en base de datos con UUID válido
         try {
           await supabase.from("photos").insert({
-            id: uniqueName,
+            id: generateUUID(),
             album_id: null,
             status: "active",
           });
@@ -360,13 +361,15 @@ export default function PhotosPage() {
   // Mover foto a papelera (status = 'trash')
   const moveToTrash = async (photoName: string) => {
     try {
-      // 1. Intentar actualizar en base de datos de Supabase
-      const { error } = await supabase
-        .from("photos")
-        .update({ status: "trash" })
-        .eq("id", photoName);
+      // 1. Intentar actualizar en base de datos de Supabase solo si el ID es un UUID válido
+      if (isValidUUID(photoName)) {
+        const { error } = await supabase
+          .from("photos")
+          .update({ status: "trash" })
+          .eq("id", photoName);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
     } catch {
       console.warn("Fallo en actualización de base de datos Supabase (RLS). Usando LocalStorage fallback...");
     } finally {
@@ -421,7 +424,7 @@ export default function PhotosPage() {
 
 
   return (
-    <div className="flex-1 p-8 space-y-8 bg-brand-cream overflow-y-auto">
+    <div className="flex-1 p-4 md:p-8 space-y-6 md:space-y-8 bg-brand-cream overflow-y-auto">
       {/* Cargador de Imágenes */}
       <div className="max-w-4xl mx-auto bg-transparent">
         <div
@@ -429,7 +432,7 @@ export default function PhotosPage() {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`border border-dashed p-10 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-4 rounded-xs ${
+          className={`border border-dashed p-6 md:p-10 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-4 rounded-xs ${
             isDragOver
               ? "border-brand-navy bg-brand-sage/15"
               : "border-brand-navy/20 hover:border-brand-navy/55 bg-brand-cream/40"
@@ -510,7 +513,7 @@ export default function PhotosPage() {
             <p className="mt-4 text-xs text-brand-navy/50">No se encontraron recuerdos que coincidan con tu búsqueda.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
             {filteredPhotos.map((photo) => {
               const nameWithoutWebp = photo.name.replace(/\.webp$/, "");
               const isRemote = photo.url.includes("supabase.co");

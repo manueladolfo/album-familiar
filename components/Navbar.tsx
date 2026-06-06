@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-export default function Navbar() {
+export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,6 +54,7 @@ export default function Navbar() {
   // Bloquear pantalla (mantiene el email para pre-relleno en login)
   const handleLockScreen = () => {
     localStorage.removeItem("family_album_session");
+    sessionStorage.removeItem("family_album_session");
     setShowDropdown(false);
     router.push("/login");
   };
@@ -61,6 +62,7 @@ export default function Navbar() {
   // Cambiar de usuario (limpia sesión y email por completo)
   const handleChangeUser = () => {
     localStorage.removeItem("family_album_session");
+    sessionStorage.removeItem("family_album_session");
     localStorage.removeItem("family_album_user_email");
     setShowDropdown(false);
     router.push("/login");
@@ -78,11 +80,24 @@ export default function Navbar() {
   };
 
   return (
-    <header className="h-16 fixed top-0 right-0 left-[280px] bg-brand-cream/90 backdrop-blur-md border-b border-brand-navy/10 flex items-center justify-between px-8 z-10">
-      {/* Título de la sección */}
-      <h2 className="text-lg font-medium text-brand-navy tracking-tight">
-        {getTitle(pathname)}
-      </h2>
+    <header className="h-16 fixed top-0 right-0 left-0 md:left-[280px] bg-brand-cream/90 backdrop-blur-md border-b border-brand-navy/10 flex items-center justify-between px-4 md:px-8 z-10">
+      {/* Lado izquierdo: Botón menú móvil + Título */}
+      <div className="flex items-center gap-3 bg-transparent">
+        {onOpenSidebar && (
+          <button
+            onClick={onOpenSidebar}
+            className="p-1.5 text-brand-navy/70 hover:text-brand-navy hover:bg-brand-navy/5 rounded-xs block md:hidden transition-colors cursor-pointer focus:outline-none"
+            title="Abrir menú lateral"
+          >
+            <svg className="w-5.5 h-5.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
+        )}
+        <h2 className="text-sm md:text-lg font-medium text-brand-navy tracking-tight truncate max-w-[150px] sm:max-w-xs md:max-w-none">
+          {getTitle(pathname)}
+        </h2>
+      </div>
 
       {/* Acciones de la barra */}
       <div className="flex items-center gap-4 bg-transparent">

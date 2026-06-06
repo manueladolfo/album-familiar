@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [keepConnected, setKeepConnected] = useState<boolean>(false);
   
   // Estado para la recuperación de contraseña
   const [isRecovering, setIsRecovering] = useState<boolean>(false);
@@ -41,35 +42,60 @@ export default function LoginPage() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 1. Intentar validar con Supabase Auth
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: password.trim(),
-        });
+      // 1. Validar si es un usuario local por defecto o si las credenciales de Supabase son simuladas
+      const isDefaultLocalUser = VALID_USERS.some(
+        (u) => u.email === email.trim() && u.password === password.trim()
+      );
 
-        if (error) throw error;
-        
-        console.log("Sesión iniciada con éxito en Supabase:", data);
-      } catch (err: any) {
-        // Fallback local: si falla Supabase Auth o no está configurado (por ejemplo, por no existir el usuario en su base de datos)
-        // Validamos contra VALID_USERS
-        const isValidLocalUser = VALID_USERS.some(
+      const isRealSupabase = supabase && 
+        process.env.NEXT_PUBLIC_SUPABASE_URL && 
+        !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder") &&
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY && 
+        !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.startsWith("sb_publishable");
+
+      let sessionStarted = false;
+
+      if (isDefaultLocalUser) {
+        console.log("Inicio de sesión local detectado para usuario predefinido. Saltando Supabase Auth.");
+      } else if (isRealSupabase) {
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password: password.trim(),
+          });
+
+          if (error) throw error;
+          
+          console.log("Sesión iniciada con éxito en Supabase:", data);
+          sessionStarted = true;
+        } catch (err: any) {
+          console.info("Fallo en Supabase Auth, intentando autenticación local de prueba:", err.message);
+        }
+      } else {
+        console.info("Supabase no está completamente configurado con credenciales reales. Usando autenticación local de prueba.");
+      }
+
+      // Fallback local si no se inició sesión en Supabase
+      if (!sessionStarted) {
+        const isValidLocalUser = isDefaultLocalUser || VALID_USERS.some(
           (u) => u.email === email.trim() && u.password === password.trim()
         );
         
-        // También permitimos un login flexible de prueba (cualquier email con contraseña de min 6 caracteres) para pruebas rápidas
         const isFlexibleUser = email.includes("@") && password.length >= 6;
 
         if (!isValidLocalUser && !isFlexibleUser) {
           throw new Error("Credenciales inválidas. Usa admin@albumfamiliar.com o familiar@albumfamiliar.com para el modo local.");
         }
         
-        console.warn("Fallo en Supabase Auth o credenciales no registradas. Activando sesión en modo local...");
+        console.log("Sesión activa en modo local.");
       }
 
-      // 2. Establecer sesión en LocalStorage
-      localStorage.setItem("family_album_session", "active");
+      // 2. Establecer sesión
+      if (keepConnected) {
+        localStorage.setItem("family_album_session", "active");
+      } else {
+        sessionStorage.setItem("family_album_session", "active");
+      }
       localStorage.setItem("family_album_user_email", email.trim());
 
       // 3. Redirigir al Dashboard
@@ -179,7 +205,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="ejemplo@correo.com"
                   required
-                  className="w-full bg-transparent border-b border-brand-navy/15 text-sm text-brand-navy focus:outline-none focus:border-brand-navy py-1.5 transition-all placeholder-brand-navy/20"
+                  className="w-full bg-transparent border-b border-brand-navy/15 text-base text-brand-navy focus:outline-none focus:border-brand-navy py-1.5 transition-all placeholder-brand-navy/20"
                 />
               </div>
 
@@ -193,11 +219,21 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full bg-transparent border-b border-brand-navy/15 text-sm text-brand-navy focus:outline-none focus:border-brand-navy py-1.5 transition-all placeholder-brand-navy/20"
+                  className="w-full bg-transparent border-b border-brand-navy/15 text-base text-brand-navy focus:outline-none focus:border-brand-navy py-1.5 transition-all placeholder-brand-navy/20"
                 />
               </div>
 
-              <div className="flex justify-between items-center bg-transparent mt-2">
+              <div className="flex justify-between items-center bg-transparent mt-2 select-none">
+                <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-medium text-brand-navy/60 hover:text-brand-navy transition-colors bg-transparent">
+                  <input
+                    type="checkbox"
+                    checked={keepConnected}
+                    onChange={(e) => setKeepConnected(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-brand-navy border border-brand-navy/20 rounded-xs cursor-pointer focus:outline-none"
+                  />
+                  Mantenerse conectado
+                </label>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -238,7 +274,7 @@ export default function LoginPage() {
                   onChange={(e) => setRecoveryEmail(e.target.value)}
                   placeholder="ejemplo@correo.com"
                   required
-                  className="w-full bg-transparent border-b border-brand-navy/15 text-sm text-brand-navy focus:outline-none focus:border-brand-navy py-1.5 transition-all placeholder-brand-navy/20"
+                  className="w-full bg-transparent border-b border-brand-navy/15 text-base text-brand-navy focus:outline-none focus:border-brand-navy py-1.5 transition-all placeholder-brand-navy/20"
                 />
               </div>
 

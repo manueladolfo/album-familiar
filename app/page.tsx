@@ -19,7 +19,7 @@ const SAMPLE_PHOTOS: SamplePhoto[] = [
     name: "sample_picnic_1988.webp",
     title: "Picnic familiar en la montaña",
     url: "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop",
-    albumId: "album-2-familia",
+    albumId: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
     createdAt: "1988-07-15T14:00:00Z"
   },
   {
@@ -27,7 +27,7 @@ const SAMPLE_PHOTOS: SamplePhoto[] = [
     name: "sample_cumpleanos_1991.webp",
     title: "Cumpleaños de la abuela Sofía",
     url: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=800&auto=format&fit=crop",
-    albumId: "album-3-cumpleanos",
+    albumId: "d3a60333-92b0-4f81-b51f-d748ad0a7203",
     createdAt: "1991-11-22T18:30:00Z"
   },
   {
@@ -35,7 +35,7 @@ const SAMPLE_PHOTOS: SamplePhoto[] = [
     name: "sample_playa_1985.webp",
     title: "Vacaciones de verano en la costa",
     url: "https://images.unsplash.com/photo-1473496169904-658ba7c44d8a?w=800&auto=format&fit=crop",
-    albumId: "album-1-vacaciones",
+    albumId: "d1a60111-92b0-4f81-b51f-d748ad0a7201",
     createdAt: "1985-08-05T12:00:00Z"
   },
   {
@@ -43,7 +43,7 @@ const SAMPLE_PHOTOS: SamplePhoto[] = [
     name: "sample_boda_1980.webp",
     title: "Boda de los padres",
     url: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop",
-    albumId: "album-2-familia",
+    albumId: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
     createdAt: "1980-05-18T16:00:00Z"
   },
   {
@@ -51,7 +51,7 @@ const SAMPLE_PHOTOS: SamplePhoto[] = [
     name: "sample_navidad_1992.webp",
     title: "Cena de Navidad en casa",
     url: "https://images.unsplash.com/photo-1543257580-7269da773bf5?w=800&auto=format&fit=crop",
-    albumId: "album-2-familia",
+    albumId: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
     createdAt: "1992-12-24T21:00:00Z"
   },
   {
@@ -59,7 +59,7 @@ const SAMPLE_PHOTOS: SamplePhoto[] = [
     name: "sample_bicicleta_1987.webp",
     title: "Paseo dominical en bicicleta",
     url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop",
-    albumId: "album-1-vacaciones",
+    albumId: "d1a60111-92b0-4f81-b51f-d748ad0a7201",
     createdAt: "1987-04-12T11:00:00Z"
   }
 ];
@@ -141,11 +141,12 @@ export default function Home() {
   // Sembrar todos los ejemplos y crear álbumes por defecto
   const seedAllExamples = () => {
     try {
+      localStorage.removeItem("family_album_cleared");
       // 1. Crear álbumes locales si no existen
       const defaultAlbums = [
-        { id: "album-1-vacaciones", name: "Vacaciones" },
-        { id: "album-2-familia", name: "Familia" },
-        { id: "album-3-cumpleanos", name: "Cumpleaños" }
+        { id: "d1a60111-92b0-4f81-b51f-d748ad0a7201", name: "Vacaciones" },
+        { id: "d2a60222-92b0-4f81-b51f-d748ad0a7202", name: "Familia" },
+        { id: "d3a60333-92b0-4f81-b51f-d748ad0a7203", name: "Cumpleaños" }
       ];
       localStorage.setItem("family_album_local_albums", JSON.stringify(defaultAlbums));
       window.dispatchEvent(new CustomEvent("refresh-albums"));
@@ -207,6 +208,7 @@ export default function Home() {
       localStorage.removeItem("family_album_local_photos");
       localStorage.removeItem("family_album_photo_statuses");
       localStorage.removeItem("family_album_photo_mappings");
+      localStorage.setItem("family_album_cleared", "true");
       setImportedPhotos([]);
       setFeedback({ type: "success", text: "Se han eliminado todos los datos de ejemplo locales de tu biblioteca." });
       window.dispatchEvent(new CustomEvent("photo-moved"));
@@ -216,16 +218,16 @@ export default function Home() {
   };
 
   return (
-    <div className="flex-1 p-8 space-y-12 bg-brand-cream overflow-y-auto max-w-6xl mx-auto w-full">
+    <div className="flex-1 p-4 md:p-8 space-y-8 md:space-y-12 bg-brand-cream overflow-y-auto max-w-6xl mx-auto w-full">
       {/* Bienvenida y Estado */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-transparent border-b border-brand-navy/10 pb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 bg-transparent border-b border-brand-navy/10 pb-6 md:pb-8">
         <div className="space-y-2 bg-transparent">
-          <h1 className="text-3xl font-light tracking-wide text-brand-navy">Dashboard</h1>
-          <p className="text-sm text-brand-navy/60 max-w-md">
+          <h1 className="text-2xl md:text-3xl font-light tracking-wide text-brand-navy">Dashboard</h1>
+          <p className="text-xs md:text-sm text-brand-navy/60 max-w-md">
             Gestiona la biblioteca de tu memoria familiar. Siembra recuerdos de catálogo para validar los flujos o sube tus propias fotos.
           </p>
         </div>
-        <div className="flex flex-col gap-3 min-w-[280px]">
+        <div className="flex flex-col gap-3 w-full md:w-auto md:min-w-[280px]">
           <div className="px-4 py-2.5 bg-brand-cream border border-brand-navy/10 rounded-xs flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
             <p className="text-[11px] font-medium text-brand-navy/80">{statusMessage}</p>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { generateUUID, isValidUUID } from "@/lib/uuid";
 
 interface AlbumItem {
   id: string;
@@ -11,7 +12,7 @@ interface AlbumItem {
   created_at?: string | null;
 }
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const [albums, setAlbums] = useState<AlbumItem[]>([]);
@@ -75,7 +76,8 @@ export default function Sidebar() {
     if (e) e.preventDefault();
     if (!newAlbumName.trim()) return;
 
-    const newId = `album-${Date.now()}`;
+    // Generar UUID v4 válido para evitar errores de tipo en Supabase
+    const newId = generateUUID();
     const newAlbum: AlbumItem = { id: newId, name: newAlbumName.trim() };
 
     try {
@@ -107,12 +109,14 @@ export default function Sidebar() {
     }
 
     try {
-      // 1. Intentar renombrar en Supabase
-      const { error } = await supabase
-        .from("albums")
-        .update({ name: editingAlbumName.trim() })
-        .eq("id", albumId);
-      if (error) throw error;
+      // 1. Intentar renombrar en Supabase solo si el ID es un UUID válido
+      if (isValidUUID(albumId)) {
+        const { error } = await supabase
+          .from("albums")
+          .update({ name: editingAlbumName.trim() })
+          .eq("id", albumId);
+        if (error) throw error;
+      }
     } catch (err: any) {
       console.warn("Fallo al renombrar álbum en Supabase (RLS). Guardando en LocalStorage fallback...", err.message);
     } finally {
@@ -136,9 +140,11 @@ export default function Sidebar() {
   // Eliminar Álbum (confirmado)
   const handleDeleteAlbum = async (albumId: string) => {
     try {
-      // 1. Intentar eliminar en Supabase
-      const { error } = await supabase.from("albums").delete().eq("id", albumId);
-      if (error) throw error;
+      // 1. Intentar eliminar en Supabase solo si el ID es un UUID válido
+      if (isValidUUID(albumId)) {
+        const { error } = await supabase.from("albums").delete().eq("id", albumId);
+        if (error) throw error;
+      }
     } catch (err: any) {
       console.warn("Fallo al eliminar álbum en Supabase (RLS). Continuando localmente...", err.message);
     } finally {
@@ -153,10 +159,12 @@ export default function Sidebar() {
       // 3. Desvincular fotos de este álbum
       // 3a. En Supabase
       try {
-        await supabase
-          .from("photos")
-          .update({ album_id: null })
-          .eq("album_id", albumId);
+        if (isValidUUID(albumId)) {
+          await supabase
+            .from("photos")
+            .update({ album_id: null })
+            .eq("album_id", albumId);
+        }
       } catch {
         // Ignorar
       }
@@ -185,6 +193,7 @@ export default function Sidebar() {
   // Cerrar Sesión
   const handleLogout = () => {
     localStorage.removeItem("family_album_session");
+    sessionStorage.removeItem("family_album_session");
     localStorage.removeItem("family_album_user_email");
     try {
       supabase.auth.signOut();
@@ -213,9 +222,9 @@ export default function Sidebar() {
           setAlbums(JSON.parse(localAlbumsJson));
         } else {
           const defaultAlbums: AlbumItem[] = [
-            { id: "album-1-vacaciones", name: "Vacaciones" },
-            { id: "album-2-familia", name: "Familia" },
-            { id: "album-3-cumpleanos", name: "Cumpleaños" },
+            { id: "d1a60111-92b0-4f81-b51f-d748ad0a7201", name: "Vacaciones" },
+            { id: "d2a60222-92b0-4f81-b51f-d748ad0a7202", name: "Familia" },
+            { id: "d3a60333-92b0-4f81-b51f-d748ad0a7203", name: "Cumpleaños" },
           ];
           localStorage.setItem("family_album_local_albums", JSON.stringify(defaultAlbums));
           setAlbums(defaultAlbums);
@@ -228,9 +237,9 @@ export default function Sidebar() {
         setAlbums(JSON.parse(localAlbumsJson));
       } else {
         const defaultAlbums: AlbumItem[] = [
-          { id: "album-1-vacaciones", name: "Vacaciones" },
-          { id: "album-2-familia", name: "Familia" },
-          { id: "album-3-cumpleanos", name: "Cumpleaños" },
+          { id: "d1a60111-92b0-4f81-b51f-d748ad0a7201", name: "Vacaciones" },
+          { id: "d2a60222-92b0-4f81-b51f-d748ad0a7202", name: "Familia" },
+          { id: "d3a60333-92b0-4f81-b51f-d748ad0a7203", name: "Cumpleaños" },
         ];
         localStorage.setItem("family_album_local_albums", JSON.stringify(defaultAlbums));
         setAlbums(defaultAlbums);
@@ -267,15 +276,16 @@ export default function Sidebar() {
     try {
       console.log(`Asociando foto ${photoId} al álbum ${albumId}`);
 
-      // 1. Intentar actualizar en Supabase Database
-      const { error } = await supabase
-        .from("photos")
-        .update({ album_id: albumId })
-        .eq("id", photoId);
+      // 1. Intentar actualizar en Supabase Database solo si ambos IDs son UUIDs válidos
+      if (isValidUUID(albumId) && isValidUUID(photoId)) {
+        const { error } = await supabase
+          .from("photos")
+          .update({ album_id: albumId })
+          .eq("id", photoId);
 
-      if (error) throw error;
-      
-      console.log("Actualizado en Supabase correctamente");
+        if (error) throw error;
+        console.log("Actualizado en Supabase correctamente");
+      }
     } catch (err) {
       console.warn("Fallo al actualizar en Supabase (RLS). Guardando en LocalStorage fallback...");
     } finally {
@@ -296,19 +306,32 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="w-[280px] fixed inset-y-0 left-0 bg-brand-cream border-r border-brand-navy/10 flex flex-col z-20">
+      <aside className={`w-[280px] fixed inset-y-0 left-0 bg-brand-cream border-r border-brand-navy/10 flex flex-col z-30 transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      }`}>
         {/* Header con Logo */}
-        <div className="py-10 px-4 border-b border-brand-navy/10 bg-transparent flex items-center justify-center">
+        <div className="py-10 px-4 border-b border-brand-navy/10 bg-transparent flex items-center justify-between gap-2 relative">
           <Link
             href="/"
-            className="flex items-center justify-center bg-transparent hover:opacity-90 transition-opacity w-full"
+            className="flex-1 flex items-center justify-center bg-transparent hover:opacity-90 transition-opacity"
           >
             <img
               src="/logo-familiar-transparente.png"
               alt="Álbum Familiar"
-              className="w-[220px] h-auto object-contain bg-transparent mix-blend-multiply"
+              className="w-[180px] sm:w-[220px] h-auto object-contain bg-transparent mix-blend-multiply"
             />
           </Link>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1 text-brand-navy/60 hover:text-brand-navy block md:hidden transition-colors cursor-pointer absolute right-2 top-2"
+              title="Cerrar menú"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Navegación Principal */}
@@ -462,7 +485,7 @@ export default function Sidebar() {
                       </Link>
 
                       {/* Botones de acción en hover */}
-                      <div className="hidden group-hover:flex items-center gap-1 bg-transparent transition-opacity">
+                      <div className="flex md:hidden md:group-hover:flex items-center gap-1 bg-transparent transition-opacity">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

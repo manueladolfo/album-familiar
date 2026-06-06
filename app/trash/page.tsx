@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 
 interface PhotoItem {
@@ -125,13 +126,15 @@ export default function TrashPage() {
   // Restaurar una foto
   const restorePhoto = async (photoName: string) => {
     try {
-      // 1. Intentar actualizar en base de datos Supabase
-      const { error } = await supabase
-        .from("photos")
-        .update({ status: "active" })
-        .eq("id", photoName);
+      // 1. Intentar actualizar en base de datos Supabase solo si el ID es UUID válido
+      if (isValidUUID(photoName)) {
+        const { error } = await supabase
+          .from("photos")
+          .update({ status: "active" })
+          .eq("id", photoName);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
     } catch {
       console.warn("Fallo al restaurar en base de datos. Usando LocalStorage fallback...");
     } finally {
@@ -184,15 +187,18 @@ export default function TrashPage() {
         console.warn("Error al borrar archivos de Storage:", storageError.message);
       }
 
-      // 2. Borrar registros de Supabase Database
-      try {
-        const { error: dbError } = await supabase
-          .from("photos")
-          .delete()
-          .in("id", idsToDeleteFromDb);
-        if (dbError) throw dbError;
-      } catch {
-        console.warn("Error al borrar de base de datos de Supabase (RLS). Continuando localmente...");
+      // 2. Borrar registros de Supabase Database (solo IDs que son UUIDs válidos)
+      const validUUIDs = idsToDeleteFromDb.filter(isValidUUID);
+      if (validUUIDs.length > 0) {
+        try {
+          const { error: dbError } = await supabase
+            .from("photos")
+            .delete()
+            .in("id", validUUIDs);
+          if (dbError) throw dbError;
+        } catch {
+          console.warn("Error al borrar de base de datos de Supabase (RLS). Continuando localmente...");
+        }
       }
 
       // 3. Borrar de LocalStorage
@@ -244,7 +250,7 @@ export default function TrashPage() {
   });
 
   return (
-    <div className="flex-1 p-8 space-y-8 bg-brand-cream overflow-y-auto">
+    <div className="flex-1 p-4 md:p-8 space-y-6 md:space-y-8 bg-brand-cream overflow-y-auto">
       {/* Cabecera */}
       <div className="max-w-6xl mx-auto flex items-center justify-between border-b border-brand-navy/10 pb-5 bg-transparent">
         <div className="space-y-1 bg-transparent">
@@ -307,7 +313,7 @@ export default function TrashPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
             {filteredPhotos.map((photo) => (
               <div
                 key={photo.name}

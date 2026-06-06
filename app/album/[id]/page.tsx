@@ -2,6 +2,7 @@
 
 import { use, useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 
 interface PhotoItem {
@@ -304,8 +305,8 @@ export default function AlbumPage({ params }: PageProps) {
         // 3. Registrar en base de datos asociando a este álbum
         try {
           await supabase.from("photos").insert({
-            id: uniqueName,
-            album_id: id,
+            id: generateUUID(),
+            album_id: isValidUUID(id) ? id : null,
             status: "active",
           });
         } catch {
@@ -427,7 +428,7 @@ export default function AlbumPage({ params }: PageProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`flex-1 p-8 space-y-8 bg-brand-cream overflow-y-auto transition-all ${
+      className={`flex-1 p-4 md:p-8 space-y-6 md:space-y-8 bg-brand-cream overflow-y-auto transition-all ${
         isDragOver ? "bg-brand-sage/10 animate-pulse" : ""
       }`}
     >
@@ -479,7 +480,7 @@ export default function AlbumPage({ params }: PageProps) {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
             {/* Tarjeta de Subida del Disco Duro */}
             <div
               onClick={() => fileInputRef.current?.click()}
