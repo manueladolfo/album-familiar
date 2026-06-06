@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 
@@ -15,6 +15,7 @@ interface AlbumItem {
 export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [albums, setAlbums] = useState<AlbumItem[]>([]);
   const [dragOverAlbumId, setDragOverAlbumId] = useState<string | null>(null);
 
@@ -26,6 +27,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
   const [showConfirmDelete, setShowConfirmDelete] = useState<string | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  
+  // Estado para la sección de Explorar
+  const [isExploreOpen, setIsExploreOpen] = useState<boolean>(true);
 
   // Enfocar inputs automáticamente
   useEffect(() => {
@@ -43,7 +47,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
   // Lista base de navegación
   const mainNavItems = [
     {
-      name: "Dashboard",
+      name: "Inicio",
       href: "/",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,6 +360,69 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
             );
           })}
         </nav>
+
+        {/* Sección Explorar (Colapsable) */}
+        <div className="px-4 pt-4 space-y-1 bg-transparent">
+          <button
+            onClick={() => setIsExploreOpen(!isExploreOpen)}
+            className="flex justify-between items-center w-full px-3 py-1.5 text-xs font-semibold text-brand-navy/50 uppercase tracking-wider hover:text-brand-navy transition-colors bg-transparent cursor-pointer"
+          >
+            <span>Explorar</span>
+            <svg
+              className={`w-3 h-3 transition-transform duration-200 ${isExploreOpen ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {isExploreOpen && (
+            <div className="space-y-1.5 bg-transparent pl-3 mt-1">
+              <Link
+                href="/photos?filter=favorites"
+                className={`flex items-center gap-3 py-1 text-xs font-medium transition-all ${
+                  pathname === "/photos" && searchParams.get("filter") === "favorites"
+                    ? "text-brand-navy font-semibold bg-transparent"
+                    : "text-brand-navy/60 hover:text-brand-navy bg-transparent"
+                }`}
+              >
+                <svg className="w-4 h-4 text-brand-navy/40" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                Favoritos
+              </Link>
+              <Link
+                href="/photos?filter=recent"
+                className={`flex items-center gap-3 py-1 text-xs font-medium transition-all ${
+                  pathname === "/photos" && searchParams.get("filter") === "recent"
+                    ? "text-brand-navy font-semibold bg-transparent"
+                    : "text-brand-navy/60 hover:text-brand-navy bg-transparent"
+                }`}
+              >
+                <svg className="w-4 h-4 text-brand-navy/40" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Recientes
+              </Link>
+              <Link
+                href="/map"
+                className={`flex items-center gap-3 py-1 text-xs font-medium transition-all ${
+                  pathname === "/map"
+                    ? "text-brand-navy font-semibold bg-transparent"
+                    : "text-brand-navy/60 hover:text-brand-navy bg-transparent"
+                }`}
+              >
+                <svg className="w-4 h-4 text-brand-navy/40" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Mapa
+              </Link>
+            </div>
+          )}
+        </div>
 
         {/* Sección de Álbumes */}
         <div className="flex-1 px-4 pt-6 space-y-2 overflow-y-auto bg-transparent">

@@ -69,7 +69,7 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
   };
 
   const getTitle = (path: string) => {
-    if (path === "/") return "Dashboard";
+    if (path === "/") return "Inicio";
     if (path === "/photos") return "Biblioteca de Fotos";
     if (path === "/trash") return "Papelera";
     if (path.startsWith("/album/")) {

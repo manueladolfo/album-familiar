@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
+import exifr from "exifr";
 
 interface PhotoItem {
   name: string;
@@ -11,6 +12,8 @@ interface PhotoItem {
   created_at: string | null;
   album_id?: string | null;
   status?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 interface AlbumItem {
@@ -21,6 +24,7 @@ interface AlbumItem {
 export default function PhotosPage() {
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("search") || "";
+  const filterParam = searchParams.get("filter") || "";
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [albums, setAlbums] = useState<AlbumItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -29,6 +33,25 @@ export default function PhotosPage() {
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<string | null>(null);
+
+  // Estado de Favoritos
+  const [favorites, setFavorites] = useState<string[]>([]);
+
+  useEffect(() => {
+    const savedFavorites = localStorage.getItem("family_album_favorites");
+    if (savedFavorites) {
+      setFavorites(JSON.parse(savedFavorites));
+    }
+  }, []);
+
+  const toggleFavorite = (photoName: string) => {
+    const updated = favorites.includes(photoName)
+      ? favorites.filter((name) => name !== photoName)
+      : [...favorites, photoName];
+    setFavorites(updated);
+    localStorage.setItem("family_album_favorites", JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent("photo-moved"));
+  };
 
   // Cargar álbumes
   const fetchAlbums = async () => {
@@ -245,6 +268,20 @@ export default function PhotosPage() {
 
       const compressedBlob = await compressImage(file);
 
+      // Extraer metadatos GPS de la imagen original usando exifr
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+      try {
+        const gps = await exifr.gps(file);
+        if (gps) {
+          latitude = gps.latitude;
+          longitude = gps.longitude;
+          console.log("Coordenadas GPS extraídas con éxito:", latitude, longitude);
+        }
+      } catch (exifErr) {
+        console.warn("No se encontraron metadatos GPS EXIF en esta foto:", exifErr);
+      }
+
       let uploadSuccess = false;
 
       // 1. Intentar subir imagen original a Supabase
@@ -281,6 +318,8 @@ export default function PhotosPage() {
             id: generateUUID(),
             album_id: null,
             status: "active",
+            latitude: latitude,
+            longitude: longitude,
           });
         } catch {
           // Fallback de mapeo si la DB falla pero el storage no
@@ -313,7 +352,9 @@ export default function PhotosPage() {
               url: base64data,
               created_at: new Date().toISOString(),
               album_id: null,
-              status: "active"
+              status: "active",
+              latitude: latitude,
+              longitude: longitude
             };
 
             // Guardar en family_album_local_photos
@@ -413,7 +454,11 @@ export default function PhotosPage() {
     return album ? album.name : null;
   };
 
-  const filteredPhotos = photos.filter((photo) => {
+  let filteredPhotos = photos.filter((photo) => {
+    if (filterParam === "favorites" && !favorites.includes(photo.name)) {
+      return false;
+    }
+
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     const photoName = photo.name.toLowerCase();
@@ -421,6 +466,10 @@ export default function PhotosPage() {
     const albumName = getAlbumName(photo.album_id)?.toLowerCase() || "";
     return photoName.includes(query) || photoYear.includes(query) || albumName.includes(query);
   });
+
+  if (filterParam === "recent") {
+    filteredPhotos = filteredPhotos.slice(0, 12);
+  }
 
 
   return (
@@ -492,10 +541,14 @@ export default function PhotosPage() {
       <div className="max-w-6xl mx-auto space-y-4">
         <div className="flex justify-between items-center bg-transparent">
           <h3 className="text-base font-medium text-brand-navy tracking-tight bg-transparent">
-            Fotos de tu biblioteca
+            {filterParam === "favorites"
+              ? "Mis Recuerdos Favoritos"
+              : filterParam === "recent"
+              ? "Recuerdos Guardados Recientemente (Últimos 12)"
+              : "Fotos de tu biblioteca"}
           </h3>
           <span className="text-[11px] text-brand-navy/40 bg-transparent select-none">
-            Tip: Arrastra una foto al Sidebar para agregarla a un álbum.
+            Tip: Arrastra una foto al Sidebar para agregarla a un álbum o haz clic en el corazón para marcarla.
           </span>
         </div>
         
@@ -545,6 +598,28 @@ export default function PhotosPage() {
                       {albumName}
                     </div>
                   )}
+
+                  {/* Botón de Favorito */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(photo.name);
+                    }}
+                    className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-brand-cream/90 backdrop-blur-xs border border-brand-navy/15 text-brand-navy hover:scale-105 transition-all cursor-pointer focus:outline-none"
+                    title={favorites.includes(photo.name) ? "Quitar de favoritos" : "Marcar como favorito"}
+                  >
+                    <svg
+                      className={`w-3.5 h-3.5 ${
+                        favorites.includes(photo.name) ? "fill-red-500 text-red-500" : "text-brand-navy/60"
+                      }`}
+                      fill={favorites.includes(photo.name) ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                  </button>
                   
                   {/* Hover overlay con desenfoque de cristal */}
                   <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
