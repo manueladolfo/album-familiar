@@ -12,12 +12,41 @@ interface AlbumItem {
   created_at?: string | null;
 }
 
+interface FloatingHeart {
+  id: number;
+  left: number;
+  size: number;
+  delay: number;
+  rotation: number;
+}
+
+
 export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [albums, setAlbums] = useState<AlbumItem[]>([]);
   const [dragOverAlbumId, setDragOverAlbumId] = useState<string | null>(null);
+  const [hearts, setHearts] = useState<FloatingHeart[]>([]);
+
+  const triggerHearts = () => {
+    // Generar una ráfaga de 6 corazones con posiciones, retrasos y rotaciones aleatorias
+    const newHearts: FloatingHeart[] = Array.from({ length: 6 }).map((_, i) => ({
+      id: Date.now() + i + Math.random(),
+      left: Math.random() * 80 + 10, // Entre 10% y 90% del ancho
+      size: Math.random() * 10 + 12, // Tamaño entre 12px y 22px
+      delay: Math.random() * 0.25, // Pequeño delay de entrada
+      rotation: Math.random() * 60 - 30, // Inclinación aleatoria entre -30deg y 30deg
+    }));
+
+    setHearts((prev) => [...prev, ...newHearts]);
+
+    // Limpiar los corazones después de completar la animación (1.3 segundos)
+    setTimeout(() => {
+      setHearts((prev) => prev.filter((h) => !newHearts.some((nh) => nh.id === h.id)));
+    }, 1300);
+  };
+
 
   // Estados de gestión de álbumes
   const [isCreating, setIsCreating] = useState<boolean>(false);
@@ -314,17 +343,44 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
         {/* Header con Logo */}
-        <div className="py-10 px-4 border-b border-brand-navy/10 bg-transparent flex items-center justify-between gap-2 relative">
+        <div 
+          className="py-10 px-4 border-b border-brand-navy/10 bg-transparent flex items-center justify-between gap-2 relative overflow-visible"
+          onMouseEnter={triggerHearts}
+          onTouchStart={(e) => {
+            // No prevenir comportamiento por defecto pero sí lanzar corazones
+            triggerHearts();
+          }}
+        >
           <Link
             href="/"
-            className="flex-1 flex items-center justify-center bg-transparent hover:opacity-90 transition-opacity"
+            className="flex-1 flex items-center justify-center bg-transparent relative"
           >
             <img
               src="/logo-familiar-transparente.png"
               alt="Álbum Familiar"
-              className="w-[180px] sm:w-[220px] h-auto object-contain bg-transparent mix-blend-multiply"
+              className="w-[180px] sm:w-[220px] h-auto object-contain bg-transparent mix-blend-multiply select-none"
             />
+
+            {/* Renderizado de corazones flotantes */}
+            <div className="absolute inset-0 pointer-events-none overflow-visible z-50">
+              {hearts.map((heart) => (
+                <span
+                  key={heart.id}
+                  className="animate-float-heart text-red-500/80 drop-shadow-sm select-none"
+                  style={{
+                    left: `${heart.left}%`,
+                    bottom: "20px",
+                    fontSize: `${heart.size}px`,
+                    animationDelay: `${heart.delay}s`,
+                    ["--rotation" as any]: `${heart.rotation}deg`,
+                  }}
+                >
+                  ❤️
+                </span>
+              ))}
+            </div>
           </Link>
+
           {onClose && (
             <button
               onClick={onClose}

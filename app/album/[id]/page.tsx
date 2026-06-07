@@ -16,6 +16,7 @@ interface PhotoItem {
 interface AlbumItem {
   id: string;
   name: string;
+  coverUrl?: string;
 }
 
 interface PageProps {
@@ -36,6 +37,7 @@ export default function AlbumPage({ params }: PageProps) {
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<string | null>(null);
+  const [albumCover, setAlbumCover] = useState<string | null>(null);
 
   // Obtener nombre del álbum y filtrar fotos
   const fetchAlbumData = async () => {
@@ -56,7 +58,10 @@ export default function AlbumPage({ params }: PageProps) {
           if (localAlbums) {
             const parsed = JSON.parse(localAlbums) as AlbumItem[];
             const found = parsed.find((a) => a.id === id);
-            if (found) setAlbumName(found.name);
+            if (found) {
+              setAlbumName(found.name);
+              setAlbumCover(found.coverUrl || null);
+            }
           }
         }
       } catch {
@@ -64,7 +69,10 @@ export default function AlbumPage({ params }: PageProps) {
         if (localAlbums) {
           const parsed = JSON.parse(localAlbums) as AlbumItem[];
           const found = parsed.find((a) => a.id === id);
-          if (found) setAlbumName(found.name);
+          if (found) {
+            setAlbumName(found.name);
+            setAlbumCover(found.coverUrl || null);
+          }
         }
       }
 
@@ -398,6 +406,29 @@ export default function AlbumPage({ params }: PageProps) {
     }
   };
 
+  // Establecer foto como portada del álbum
+  const setAlbumCoverImage = (url: string) => {
+    try {
+      const localAlbumsJson = localStorage.getItem("family_album_local_albums");
+      if (localAlbumsJson) {
+        const parsed = JSON.parse(localAlbumsJson) as AlbumItem[];
+        const updated = parsed.map((a) => a.id === id ? { ...a, coverUrl: url } : a);
+        localStorage.setItem("family_album_local_albums", JSON.stringify(updated));
+        setAlbumCover(url);
+        
+        // Refrescar Sidebar
+        window.dispatchEvent(new CustomEvent("refresh-albums"));
+        
+        setUploadStatus({
+          type: "success",
+          message: "¡Foto de portada del álbum actualizada con éxito!",
+        });
+      }
+    } catch (err) {
+      console.error("Error al actualizar portada del álbum:", err);
+    }
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -433,17 +464,33 @@ export default function AlbumPage({ params }: PageProps) {
       }`}
     >
       {/* Cabecera del Álbum */}
-      <div className="max-w-6xl mx-auto flex items-center justify-between border-b border-brand-navy/10 pb-5 bg-transparent">
-        <div className="space-y-1 bg-transparent">
-          <h1 className="text-2xl font-light tracking-wide text-brand-navy">
-            {albumName}
-          </h1>
-          <p className="text-[11px] text-brand-navy/55 bg-transparent">
-            Álbum familiar con identificador &quot;{id}&quot; • {filteredPhotos.length} {filteredPhotos.length === 1 ? "foto" : "fotos"}
-            {searchQuery && ` (filtrado de un total de ${photos.length})`}
-          </p>
+      {albumCover ? (
+        <div className="max-w-6xl mx-auto relative h-40 sm:h-48 rounded-xs overflow-hidden border border-brand-navy/10 shadow-sm group mb-6">
+          <img src={albumCover} alt={albumName} className="w-full h-full object-cover group-hover:scale-[1.01] transition-transform duration-700" />
+          <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/90 via-brand-navy/30 to-transparent flex flex-col justify-end p-6" />
+          <div className="absolute bottom-6 left-6 text-brand-cream space-y-1 bg-transparent">
+            <h1 className="text-xl sm:text-2xl font-light tracking-wide uppercase">
+              {albumName}
+            </h1>
+            <p className="text-[10px] sm:text-xs text-brand-cream/75 bg-transparent font-medium">
+              Álbum de fotos • {filteredPhotos.length} {filteredPhotos.length === 1 ? "recuerdo" : "recuerdos"}
+              {searchQuery && ` (filtrado de un total de ${photos.length})`}
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="max-w-6xl mx-auto flex items-center justify-between border-b border-brand-navy/10 pb-5 bg-transparent">
+          <div className="space-y-1 bg-transparent">
+            <h1 className="text-2xl font-light tracking-wide text-brand-navy">
+              {albumName}
+            </h1>
+            <p className="text-[11px] text-brand-navy/55 bg-transparent">
+              Álbum de fotos • {filteredPhotos.length} {filteredPhotos.length === 1 ? "recuerdo" : "recuerdos"}
+              {searchQuery && ` (filtrado de un total de ${photos.length})`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Cuadrícula de fotos del álbum */}
       <div className="max-w-6xl mx-auto">
@@ -516,11 +563,15 @@ export default function AlbumPage({ params }: PageProps) {
                 ? supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl
                 : photo.url;
 
+              const isCurrentCover = albumCover === photo.url;
+
               return (
                 <div
                   key={photo.name}
                   onClick={() => setActiveLightboxPhoto(originalUrl)}
-                  className="group relative aspect-square bg-brand-cream/50 rounded-xs overflow-hidden border border-brand-navy/10 hover:border-brand-navy transition-all duration-300 cursor-zoom-in select-none"
+                  className={`group relative aspect-square bg-brand-cream/50 rounded-xs overflow-hidden border transition-all duration-300 cursor-zoom-in select-none ${
+                    isCurrentCover ? "border-brand-navy ring-2 ring-brand-navy" : "border-brand-navy/10 hover:border-brand-navy"
+                  }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -532,7 +583,7 @@ export default function AlbumPage({ params }: PageProps) {
                   
                   {/* Hover overlay con desenfoque de cristal */}
                   <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-end p-4 z-10">
-                    <div className="bg-transparent mb-2">
+                    <div className="bg-transparent mb-2 text-left">
                       <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
                         {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
                       </p>
@@ -540,18 +591,34 @@ export default function AlbumPage({ params }: PageProps) {
                         {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
                       </p>
                     </div>
-                    <div className="flex gap-2 bg-transparent">
+                    <div className="flex gap-2 bg-transparent w-full">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setActiveLightboxPhoto(originalUrl);
                         }}
-                        className="flex-1 py-1.5 px-3 border border-brand-cream/30 hover:bg-brand-cream/10 text-brand-cream text-[11px] font-medium rounded-xs text-center transition-all cursor-pointer"
+                        className="flex-1 py-1.5 px-2.5 border border-brand-cream/30 hover:bg-brand-cream/10 text-brand-cream text-[10px] sm:text-[11px] font-medium rounded-xs text-center transition-all cursor-pointer"
                       >
                         Ver Original
                       </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAlbumCoverImage(photo.url);
+                        }}
+                        className="py-1.5 px-2.5 bg-brand-cream text-brand-navy hover:bg-brand-navy hover:text-brand-cream text-[10px] sm:text-[11px] font-semibold rounded-xs text-center transition-all cursor-pointer"
+                      >
+                        Portada
+                      </button>
                     </div>
                   </div>
+
+                  {/* Etiqueta persistente para la portada actual del álbum */}
+                  {isCurrentCover && (
+                    <div className="absolute bottom-0 inset-x-0 bg-brand-navy/85 text-[8px] text-brand-cream py-0.5 text-center font-bold tracking-wider uppercase z-20">
+                      Portada
+                    </div>
+                  )}
                 </div>
               );
             })}

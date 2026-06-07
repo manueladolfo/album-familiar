@@ -70,16 +70,42 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
     router.push("/login");
   };
 
-  const getTitle = (path: string) => {
-    if (path === "/") return "Inicio";
-    if (path === "/photos") return "Biblioteca de Fotos";
-    if (path === "/trash") return "Papelera";
-    if (path.startsWith("/album/")) {
-      const albumId = path.split("/").pop();
-      return `Álbum #${albumId}`;
+  const [title, setTitle] = useState<string>("Álbum Familiar");
+
+  const updateTitle = () => {
+    if (pathname === "/") {
+      setTitle("Inicio");
+    } else if (pathname === "/photos") {
+      setTitle("Biblioteca de Fotos");
+    } else if (pathname === "/trash") {
+      setTitle("Papelera");
+    } else if (pathname.startsWith("/album/")) {
+      const albumId = pathname.split("/").pop();
+      const localAlbumsJson = localStorage.getItem("family_album_local_albums");
+      if (localAlbumsJson) {
+        const parsed = JSON.parse(localAlbumsJson);
+        const found = parsed.find((a: any) => a.id === albumId);
+        if (found) {
+          setTitle(`Álbum: ${found.name}`);
+          return;
+        }
+      }
+      setTitle("Álbum");
+    } else {
+      setTitle("Álbum Familiar");
     }
-    return "Álbum Familiar";
   };
+
+  useEffect(() => {
+    updateTitle();
+
+    window.addEventListener("refresh-albums", updateTitle);
+    window.addEventListener("photo-moved", updateTitle);
+    return () => {
+      window.removeEventListener("refresh-albums", updateTitle);
+      window.removeEventListener("photo-moved", updateTitle);
+    };
+  }, [pathname]);
 
   return (
     <header className="h-16 fixed top-0 right-0 left-0 md:left-[280px] bg-brand-cream/90 backdrop-blur-md border-b border-brand-navy/10 flex items-center justify-between px-4 md:px-8 z-10">
@@ -97,7 +123,7 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
           </button>
         )}
         <h2 className="text-sm md:text-lg font-medium text-brand-navy tracking-tight truncate max-w-[150px] sm:max-w-xs md:max-w-none">
-          {getTitle(pathname)}
+          {title}
         </h2>
       </div>
 

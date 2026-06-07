@@ -19,3 +19,24 @@ body {
   font-family: var(--font-sans);
 }
 
+@keyframes floatHeart {
+  0% {
+    transform: translateY(0) scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.95;
+    transform: translateY(-15px) scale(1.2) rotate(calc(var(--rotation, 15deg) * 0.3));
+  }
+  100% {
+    transform: translateY(-90px) scale(0.7) rotate(var(--rotation, 15deg));
+    opacity: 0;
+  }
+}
+
+.animate-float-heart {
+  animation: floatHeart 1s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  position: absolute;
+}
+
+

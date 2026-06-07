@@ -170,6 +170,12 @@ export default function Home() {
   const [unassignedPhotos, setUnassignedPhotos] = useState<LocalPhotoItem[]>([]);
   const [suggestedPhotos, setSuggestedPhotos] = useState<LocalPhotoItem[]>([]);
 
+  // Estados para añadir nueva persona/mascota
+  const [isAddPersonOpen, setIsAddPersonOpen] = useState<boolean>(false);
+  const [newPersonName, setNewPersonName] = useState<string>("");
+  const [selectedPhotoNamesForNewPerson, setSelectedPhotoNamesForNewPerson] = useState<string[]>([]);
+  const [newPersonIsGroup, setNewPersonIsGroup] = useState<boolean>(false);
+
   // Inicialización de música, personas e importados
   useEffect(() => {
     // 1. Inicializar Supabase status
@@ -330,6 +336,18 @@ export default function Home() {
 
     localStorage.setItem("family_album_person_tags", JSON.stringify(newTagged));
     setTaggedPhotos(newTagged);
+  };
+
+  // Establecer foto como portada del perfil de persona o grupo
+  const setPersonAvatar = (personId: string, photoUrl: string) => {
+    const updatedPeople = people.map(p => p.id === personId ? { ...p, avatar: photoUrl } : p);
+    setPeople(updatedPeople);
+    localStorage.setItem("family_album_people", JSON.stringify(updatedPeople));
+    
+    if (selectedPerson && selectedPerson.id === personId) {
+      setSelectedPerson({ ...selectedPerson, avatar: photoUrl });
+    }
+    setFeedback({ type: "success", text: "Foto de portada del perfil actualizada." });
   };
 
   // Sembrar todos los ejemplos locales
@@ -661,6 +679,27 @@ export default function Home() {
                 </div>
               );
             })}
+
+            {/* Tarjeta de acción para Añadir Nuevo Grupo */}
+            <div
+              onClick={() => {
+                setIsAddPersonOpen(true);
+                setNewPersonIsGroup(true);
+              }}
+              className="group relative aspect-video bg-brand-cream border border-dashed border-brand-navy/25 hover:border-brand-navy/50 hover:bg-brand-navy/5 transition-all rounded-xs cursor-pointer flex flex-col items-center justify-center gap-3 p-4 shadow-sm min-h-[140px]"
+            >
+              <div className="w-12 h-12 rounded-full border border-dashed border-brand-navy/20 flex items-center justify-center bg-transparent group-hover:scale-104 transition-transform duration-300">
+                <svg className="w-5 h-5 text-brand-navy/40 group-hover:text-brand-navy" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </div>
+              <div className="space-y-0.5 bg-transparent text-center">
+                <h4 className="text-xs font-semibold text-brand-navy/80 group-hover:text-brand-navy uppercase tracking-wide">
+                  Añadir Grupo
+                </h4>
+                <p className="text-[10px] text-brand-navy/40">Crear colección grupal</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -697,6 +736,27 @@ export default function Home() {
                 </div>
               );
             })}
+
+            {/* Tarjeta de acción para Añadir Nueva Persona/Mascota */}
+            <div
+              onClick={() => {
+                setIsAddPersonOpen(true);
+                setNewPersonIsGroup(false);
+              }}
+              className="group flex flex-col items-center justify-center gap-3 p-4 bg-brand-cream border border-dashed border-brand-navy/25 hover:border-brand-navy/50 hover:bg-brand-navy/5 transition-all rounded-xs cursor-pointer text-center min-h-[160px]"
+            >
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border border-dashed border-brand-navy/20 flex items-center justify-center bg-transparent group-hover:scale-104 transition-transform duration-300">
+                <svg className="w-6 h-6 text-brand-navy/40 group-hover:text-brand-navy" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </div>
+              <div className="space-y-0.5 bg-transparent">
+                <h4 className="text-xs font-semibold text-brand-navy/80 group-hover:text-brand-navy uppercase tracking-wide">
+                  Añadir Nueva
+                </h4>
+                <p className="text-[10px] text-brand-navy/40">Persona o mascota</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -837,18 +897,48 @@ export default function Home() {
 
                   return (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      {assigned.map((photo: LocalPhotoItem) => (
-                        <div key={photo.name} className="group relative aspect-square bg-brand-navy/5 rounded-xs overflow-hidden border border-brand-navy/10">
-                          <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
-                          <button
-                            onClick={() => removePhotoFromPerson(photo.name)}
-                            className="absolute top-2 right-2 p-1.5 bg-red-600 hover:bg-red-700 text-brand-cream text-[10px] rounded-xs shadow-md opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                            title="Quitar de este álbum de persona"
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      ))}
+                      {assigned.map((photo: LocalPhotoItem) => {
+                        const isCurrentAvatar = selectedPerson.avatar === photo.url;
+                        return (
+                          <div key={photo.name} className={`group relative aspect-square bg-brand-navy/5 rounded-xs overflow-hidden border transition-all duration-200 ${
+                            isCurrentAvatar ? "border-brand-navy ring-2 ring-brand-navy" : "border-brand-navy/10 hover:border-brand-navy/30"
+                          }`}>
+                            <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
+                            
+                            {/* Overlay en hover */}
+                            <div className="absolute inset-0 bg-brand-navy/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
+                              <div className="flex gap-2 justify-between items-start bg-transparent w-full">
+                                <button
+                                  onClick={() => setPersonAvatar(selectedPerson.id, photo.url)}
+                                  disabled={isCurrentAvatar}
+                                  className={`p-1 text-[9px] font-semibold rounded-xs shadow-md cursor-pointer transition-all ${
+                                    isCurrentAvatar
+                                      ? "bg-brand-navy text-brand-cream/60 cursor-not-allowed opacity-50"
+                                      : "bg-brand-cream text-brand-navy hover:bg-brand-navy hover:text-brand-cream"
+                                  }`}
+                                  title="Establecer como foto de portada"
+                                >
+                                  Portada
+                                </button>
+                                <button
+                                  onClick={() => removePhotoFromPerson(photo.name)}
+                                  className="p-1 bg-red-600 hover:bg-red-700 text-brand-cream text-[9px] rounded-xs shadow-md cursor-pointer transition-colors"
+                                  title="Quitar de este álbum"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Etiqueta persistente para la portada actual */}
+                            {isCurrentAvatar && (
+                              <div className="absolute bottom-0 inset-x-0 bg-brand-navy/85 text-[8px] text-brand-cream py-0.5 text-center font-bold tracking-wider uppercase">
+                                Portada actual
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })()}
@@ -929,6 +1019,213 @@ export default function Home() {
                 className="py-1.5 px-4 bg-brand-navy text-brand-cream text-xs font-semibold rounded-xs cursor-pointer hover:bg-brand-navy/90"
               >
                 Listo
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AÑADIR NUEVA PERSONA O MASCOTA / GRUPO */}
+      {isAddPersonOpen && (
+        <div className="fixed inset-0 bg-brand-navy/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-brand-cream border border-brand-navy/25 rounded-xs p-6 max-w-2xl w-full max-h-[85vh] flex flex-col justify-between shadow-2xl animate-in zoom-in-95 duration-200">
+            
+            {/* Header del Modal */}
+            <div className="flex justify-between items-center pb-4 border-b border-brand-navy/10 bg-transparent">
+              <div className="bg-transparent">
+                <h3 className="text-base font-bold text-brand-navy uppercase tracking-wide">
+                  {newPersonIsGroup ? "Añadir Grupo Familiar" : "Añadir Persona o Mascota"}
+                </h3>
+                <p className="text-[10px] text-brand-navy/55 font-medium">
+                  {newPersonIsGroup 
+                    ? "Crea una nueva colección grupal y asóciale sus fotos correspondientes." 
+                    : "Crea un nuevo perfil y asóciale sus fotos correspondientes."}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddPersonOpen(false);
+                  setNewPersonName("");
+                  setSelectedPhotoNamesForNewPerson([]);
+                }}
+                className="p-1 hover:bg-brand-navy/5 text-brand-navy/70 hover:text-brand-navy rounded-xs cursor-pointer text-xs"
+              >
+                ✕ Cancelar
+              </button>
+            </div>
+
+            {/* Contenido del Modal */}
+            <div className="flex-1 overflow-y-auto py-6 space-y-6 bg-transparent pr-1">
+              {/* Formulario Nombre */}
+              <div className="space-y-2 bg-transparent">
+                <label className="text-xs font-semibold text-brand-navy/70 uppercase tracking-wider block">
+                  Nombre del {newPersonIsGroup ? "Grupo" : "Perfil"}
+                </label>
+                <input
+                  type="text"
+                  value={newPersonName}
+                  onChange={(e) => setNewPersonName(e.target.value)}
+                  placeholder={newPersonIsGroup ? "Ej. Primos, Hermanos, Viajes..." : "Ej. Tía María, Firulais, Papá..."}
+                  className="w-full px-3 py-2 bg-transparent border border-brand-navy/20 focus:border-brand-navy text-xs rounded-xs outline-none text-brand-navy font-medium placeholder:text-brand-navy/30"
+                  maxLength={40}
+                />
+              </div>
+
+              {/* Grid de Fotos de la Biblioteca */}
+              <div className="space-y-3 bg-transparent">
+                <div className="bg-transparent">
+                  <label className="text-xs font-semibold text-brand-navy/70 uppercase tracking-wider block">
+                    Etiquetar en fotos existentes
+                  </label>
+                  <p className="text-[10px] text-brand-navy/40">
+                    {newPersonIsGroup 
+                      ? "Selecciona las fotos de la biblioteca donde aparecen. La primera seleccionada será la portada del grupo." 
+                      : "Selecciona las fotos de la biblioteca donde aparece. La primera seleccionada será su foto de perfil (avatar)."}
+                  </p>
+                </div>
+
+                {(() => {
+                  const localPhotosJson = typeof window !== "undefined" ? localStorage.getItem("family_album_local_photos") || "[]" : "[]";
+                  const localPhotos: LocalPhotoItem[] = JSON.parse(localPhotosJson);
+                  const activeLocalPhotos = localPhotos.filter((p) => p.status !== "trash");
+
+                  if (activeLocalPhotos.length === 0) {
+                    return (
+                      <div className="text-center py-8 border border-dashed border-brand-navy/20 rounded-xs bg-brand-navy/5">
+                        <p className="text-xs text-brand-navy/50 italic">
+                          No tienes fotos en tu biblioteca. Importa fotos del catálogo primero.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
+                      {activeLocalPhotos.map((photo) => {
+                        const isSelected = selectedPhotoNamesForNewPerson.includes(photo.name);
+                        const selectIndex = selectedPhotoNamesForNewPerson.indexOf(photo.name);
+
+                        return (
+                          <div
+                            key={photo.name}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedPhotoNamesForNewPerson((prev) =>
+                                  prev.filter((name) => name !== photo.name)
+                                );
+                              } else {
+                                setSelectedPhotoNamesForNewPerson((prev) => [...prev, photo.name]);
+                              }
+                            }}
+                            className={`relative aspect-square rounded-xs overflow-hidden border cursor-pointer group transition-all duration-200 ${
+                              isSelected
+                                ? "border-brand-navy ring-2 ring-brand-navy"
+                                : "border-brand-navy/10 hover:border-brand-navy/30"
+                            }`}
+                          >
+                            <img
+                              src={photo.url}
+                              alt={photo.name}
+                              className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-102 ${
+                                isSelected ? "brightness-90" : ""
+                              }`}
+                            />
+                            
+                            {/* Checkmark visual y orden de selección */}
+                            {isSelected && (
+                              <div className="absolute top-1.5 right-1.5 bg-brand-navy text-brand-cream rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold shadow-md">
+                                {selectIndex === 0 ? "★" : selectIndex + 1}
+                              </div>
+                            )}
+
+                            {/* Indicador de primera selección (Avatar / Portada) */}
+                            {isSelected && selectIndex === 0 && (
+                              <div className="absolute bottom-0 inset-x-0 bg-brand-navy/80 text-[8px] text-brand-cream py-0.5 text-center font-bold tracking-wider uppercase">
+                                {newPersonIsGroup ? "Portada del grupo" : "Foto de perfil"}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Footer del Modal */}
+            <div className="pt-4 border-t border-brand-navy/10 flex justify-end gap-3 bg-transparent">
+              <button
+                onClick={() => {
+                  setIsAddPersonOpen(false);
+                  setNewPersonName("");
+                  setSelectedPhotoNamesForNewPerson([]);
+                }}
+                className="py-1.5 px-4 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy text-xs font-medium rounded-xs transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (!newPersonName.trim()) {
+                    setFeedback({ type: "error", text: "Por favor, introduce un nombre." });
+                    return;
+                  }
+
+                  const newId = `p_${Date.now()}`;
+                  
+                  // Obtener la URL de la primera foto seleccionada (si hay)
+                  let avatarUrl = newPersonIsGroup 
+                    ? "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop" // Imagen de grupo por defecto
+                    : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop"; // Avatar por defecto
+                  if (selectedPhotoNamesForNewPerson.length > 0) {
+                    const localPhotosJson = typeof window !== "undefined" ? localStorage.getItem("family_album_local_photos") || "[]" : "[]";
+                    const localPhotos: LocalPhotoItem[] = JSON.parse(localPhotosJson);
+                    const firstPhoto = localPhotos.find((p) => p.name === selectedPhotoNamesForNewPerson[0]);
+                    if (firstPhoto && firstPhoto.url) {
+                      avatarUrl = firstPhoto.url;
+                    }
+                  }
+
+                  const newPerson: PersonProfile = {
+                    id: newId,
+                    name: newPersonName.trim(),
+                    avatar: avatarUrl,
+                    isGroup: newPersonIsGroup,
+                    tags: [newPersonName.trim().toLowerCase()]
+                  };
+
+                  const updatedPeople = [...people, newPerson];
+                  setPeople(updatedPeople);
+                  localStorage.setItem("family_album_people", JSON.stringify(updatedPeople));
+
+                  const updatedTagged = {
+                    ...taggedPhotos,
+                    [newId]: selectedPhotoNamesForNewPerson
+                  };
+                  setTaggedPhotos(updatedTagged);
+                  localStorage.setItem("family_album_person_tags", JSON.stringify(updatedTagged));
+
+                  setIsAddPersonOpen(false);
+                  setNewPersonName("");
+                  setSelectedPhotoNamesForNewPerson([]);
+
+                  setFeedback({
+                    type: "success",
+                    text: newPersonIsGroup
+                      ? `¡Se ha creado el grupo "${newPerson.name}" con ${selectedPhotoNamesForNewPerson.length} fotos!`
+                      : `¡Se ha añadido a "${newPerson.name}" y etiquetado en ${selectedPhotoNamesForNewPerson.length} fotos!`
+                  });
+                }}
+                disabled={!newPersonName.trim()}
+                className={`py-1.5 px-4 text-xs font-semibold rounded-xs transition-all cursor-pointer ${
+                  newPersonName.trim()
+                    ? "bg-brand-navy text-brand-cream hover:bg-brand-navy/90"
+                    : "bg-brand-navy/20 text-brand-cream/60 cursor-not-allowed"
+                }`}
+              >
+                Guardar
               </button>
             </div>
 
