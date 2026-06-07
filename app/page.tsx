@@ -149,19 +149,7 @@ export default function Home() {
 
   // Estados de Colecciones & Música
   const [activeCollectionIndex, setActiveCollectionIndex] = useState<number>(0);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
-  const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [volume, setVolume] = useState<number>(0.4);
   const [isFullscreenCarousel, setIsFullscreenCarousel] = useState<boolean>(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  const musicTracks = [
-    { title: "Melodía Lofi del Amanecer (Tranquilo)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" },
-    { title: "Brisa Calma Lofi (Relajante)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3" },
-    { title: "Atardecer Lofi de Ensueño (Suave)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3" },
-    { title: "Nostalgia Lofi Nocturna (Calma)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3" }
-  ];
 
   // Estados para Personas
   const [people, setPeople] = useState<PersonProfile[]>([]);
@@ -227,43 +215,10 @@ export default function Home() {
 
     loadImported();
     window.addEventListener("photo-moved", loadImported);
-
-    // 5. Inicializar reproductor de audio
-    audioRef.current = new Audio(musicTracks[currentTrackIndex].url);
-    audioRef.current.loop = true;
-    audioRef.current.volume = volume;
-    audioRef.current.muted = isMuted;
-
     return () => {
       window.removeEventListener("photo-moved", loadImported);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
     };
   }, []);
-
-  // Efecto para actualizar el reproductor al cambiar volumen, mute o track
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.muted = isMuted;
-    }
-  }, [isMuted]);
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume;
-    }
-  }, [volume]);
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.src = musicTracks[currentTrackIndex].url;
-      if (isPlaying) {
-        audioRef.current.play().catch(() => setIsPlaying(false));
-      }
-    }
-  }, [currentTrackIndex]);
 
   // Rotación automática del carrusel cada 6 segundos
   useEffect(() => {
@@ -272,20 +227,6 @@ export default function Home() {
     }, 6000);
     return () => clearInterval(timer);
   }, []);
-
-  const toggleMusic = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
-    }
-  };
-
-  const handleNextTrack = () => {
-    setCurrentTrackIndex((prev) => (prev + 1) % musicTracks.length);
-  };
 
   // Cargar fotos asociadas al perfil de persona seleccionado y buscar sugerencias
   useEffect(() => {
@@ -519,63 +460,17 @@ export default function Home() {
             <p className="text-xs text-brand-navy/55">Disfruta de tus fotografías familiares ambientadas con melodías relajantes.</p>
           </div>
 
-          {/* Reproductor de Audio Premium Estilo Glassmorphism */}
-          <div className="flex items-center gap-3 bg-brand-cream border border-brand-navy/15 rounded-xs p-1.5 shadow-sm max-w-xs md:max-w-md">
-            <button
-              onClick={toggleMusic}
-              className="w-7 h-7 flex items-center justify-center bg-brand-navy text-brand-cream rounded-xs hover:bg-brand-navy/90 transition-all cursor-pointer focus:outline-none"
-              title={isPlaying ? "Pausar música" : "Reproducir música"}
-            >
-              {isPlaying ? (
-                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                  <path fillRule="evenodd" d="M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg className="w-3.5 h-3.5 pl-0.5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )}
-            </button>
-
-            <div className="hidden sm:block space-y-0.5 bg-transparent max-w-[120px] md:max-w-[180px]">
-              <p className="text-[9px] uppercase font-bold text-brand-navy/40 tracking-wider">Música de fondo</p>
-              <p className="text-[10px] font-semibold text-brand-navy truncate">{musicTracks[currentTrackIndex].title}</p>
-            </div>
-
-            <button
-              onClick={handleNextTrack}
-              className="p-1 hover:bg-brand-navy/5 rounded-xs text-brand-navy/70 hover:text-brand-navy cursor-pointer focus:outline-none"
-              title="Siguiente pista"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 5v14l8-7zm8 0v14l8-7z" />
-              </svg>
-            </button>
-
-            <button
-              onClick={() => setIsMuted(!isMuted)}
-              className="p-1 hover:bg-brand-navy/5 rounded-xs text-brand-navy/70 hover:text-brand-navy cursor-pointer focus:outline-none"
-              title={isMuted ? "Quitar silencio" : "Silenciar"}
-            >
-              {isMuted ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6L4.5 9H1.5v6h3l4.5 3.75V8.25z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-                </svg>
-              )}
-            </button>
-
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={volume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-12 h-1 accent-brand-navy cursor-pointer hidden md:block"
+          {/* Reproductor de Spotify Premium Estilo Glassmorphism */}
+          <div className="w-full max-w-[420px] h-[80px] bg-transparent rounded-xs overflow-hidden border border-brand-navy/15 shadow-sm">
+            <iframe
+              style={{ borderRadius: "8px" }}
+              src="https://open.spotify.com/embed/playlist/37i9dQZF1DWWQRwui0ExPn?utm_source=generator&theme=0"
+              width="100%"
+              height="80"
+              frameBorder="0"
+              allowFullScreen={false}
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
             />
           </div>
         </div>
@@ -1313,69 +1208,21 @@ export default function Home() {
 
           </div>
 
-          {/* Floating Music & Controls Bar en la base */}
+          {/* Floating Spotify Player en la base */}
           <div
-            className="w-full max-w-lg mx-auto bg-brand-cream/10 backdrop-blur-md border border-brand-cream/15 rounded-xs p-4 flex items-center justify-between gap-4 shadow-xl text-brand-cream z-10"
+            className="w-full max-w-[420px] mx-auto bg-transparent rounded-xs overflow-hidden border border-brand-cream/15 shadow-xl z-10"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={toggleMusic}
-              className="w-8 h-8 flex items-center justify-center bg-brand-cream text-brand-navy rounded-xs hover:bg-brand-cream/90 transition-all cursor-pointer focus:outline-none"
-              title={isPlaying ? "Pausar música" : "Reproducir música"}
-            >
-              {isPlaying ? (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path fillRule="evenodd" d="M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4 pl-0.5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )}
-            </button>
-
-            <div className="flex-1 space-y-0.5 text-left bg-transparent truncate">
-              <p className="text-[8px] uppercase font-bold text-brand-cream/50 tracking-wider">Música ambiente</p>
-              <p className="text-[10px] font-semibold text-brand-cream truncate">{musicTracks[currentTrackIndex].title}</p>
-            </div>
-
-            <div className="flex items-center gap-3 bg-transparent">
-              <button
-                onClick={handleNextTrack}
-                className="p-1.5 hover:bg-brand-cream/10 rounded-xs text-brand-cream/80 hover:text-brand-cream cursor-pointer focus:outline-none"
-                title="Siguiente pista"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5v14l8-7zm8 0v14l8-7z" />
-                </svg>
-              </button>
-
-              <button
-                onClick={() => setIsMuted(!isMuted)}
-                className="p-1.5 hover:bg-brand-cream/10 rounded-xs text-brand-cream/80 hover:text-brand-cream cursor-pointer focus:outline-none"
-                title={isMuted ? "Quitar silencio" : "Silenciar"}
-              >
-                {isMuted ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6L4.5 9H1.5v6h3l4.5 3.75V8.25z" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-                  </svg>
-                )}
-              </button>
-
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={volume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="w-16 h-1 accent-brand-cream cursor-pointer hidden sm:block"
-              />
-            </div>
+            <iframe
+              style={{ borderRadius: "8px" }}
+              src="https://open.spotify.com/embed/playlist/37i9dQZF1DWWQRwui0ExPn?utm_source=generator&theme=0"
+              width="100%"
+              height="80"
+              frameBorder="0"
+              allowFullScreen={false}
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
+            />
           </div>
 
         </div>
