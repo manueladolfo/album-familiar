@@ -410,13 +410,21 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         }
 
         let tags: string[] = [];
-        if (base64Data) {
-          tags = await analyzePhotoWithGemini(base64Data, key);
+        try {
+          if (base64Data) {
+            tags = await analyzePhotoWithGemini(base64Data, key);
+          }
+        } catch (geminiErr) {
+          console.error(`Error procesando foto ${photo.name} con Gemini:`, geminiErr);
         }
 
         let locationText = "";
-        if (photo.latitude && photo.longitude) {
-          locationText = await getReverseGeocoding(photo.latitude, photo.longitude);
+        try {
+          if (photo.latitude && photo.longitude) {
+            locationText = await getReverseGeocoding(photo.latitude, photo.longitude);
+          }
+        } catch (geoErr) {
+          console.error(`Error obteniendo ubicación de foto ${photo.name}:`, geoErr);
         }
 
         // Si se generaron etiquetas o se obtuvo ubicación, guardar metadatos

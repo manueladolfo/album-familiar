@@ -177,7 +177,20 @@ export async function analyzePhotoWithGemini(base64Data: string, apiKey: string)
     );
 
     if (!response.ok) {
-      throw new Error(`API de Gemini error: ${response.statusText}`);
+      let errorMsg = response.statusText || `${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData?.error?.message) {
+          errorMsg = errorData.error.message;
+        } else if (typeof errorData === "string") {
+          errorMsg = errorData;
+        } else if (errorData) {
+          errorMsg = JSON.stringify(errorData);
+        }
+      } catch (_) {
+        // Ignorar fallo al parsear el JSON de error
+      }
+      throw new Error(`API de Gemini error: ${errorMsg}`);
     }
 
     const data = await response.json();
