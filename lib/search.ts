@@ -163,7 +163,7 @@ export async function analyzePhotoWithGemini(base64Data: string, apiKey: string)
             {
               parts: [
                 {
-                  text: "Analiza esta imagen y genera exactamente entre 5 y 10 etiquetas cortas en español separadas por comas que describan los objetos, escena, colores, emociones o entorno de la foto (por ejemplo: playa, atardecer, familia, risas, perro). Devuelve únicamente la lista de etiquetas separadas por comas, sin explicaciones ni texto introductorio de ningún tipo."
+                  text: "Eres un asistente experto en análisis visual de fotografías familiares. Analiza esta imagen con detalle y genera exactamente entre 5 y 8 etiquetas cortas y específicas en español, separadas por comas. Las etiquetas deben describir elementos concretos y únicos de ESTA foto en particular. Incluye: personas visibles (ej: pareja, bebé, niños, grupo), actividad o acción (ej: cocinando, paseando, celebrando, abrazándose), lugar o escenario concreto (ej: playa, cocina, puerto, montaña, terraza), objetos destacados (ej: flores, gorra, vestido de novia, coche), emociones percibidas (ej: alegría, ternura, diversión), y momento del día o clima si es evidente (ej: atardecer, día soleado). PROHIBIDO usar etiquetas genéricas como 'recuerdo', 'familiar', 'foto', 'imagen' o 'momento'. Sé creativo y descriptivo. Devuelve ÚNICAMENTE la lista de etiquetas separadas por comas, sin explicaciones."
                 },
                 {
                   inlineData: {
@@ -199,10 +199,11 @@ export async function analyzePhotoWithGemini(base64Data: string, apiKey: string)
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     
     // Convertir a array de etiquetas limpias
+    const bannedTags = ["recuerdo", "familiar", "foto", "imagen", "momento", "fotografía", "recuerdo familiar", "foto familiar"];
     const tags = text
       .split(",")
       .map((tag: string) => tag.replace(/[.*+?^${}()|[\]\\]/g, "").trim().toLowerCase())
-      .filter((tag: string) => tag.length > 0 && !tag.includes("\n"));
+      .filter((tag: string) => tag.length > 1 && !tag.includes("\n") && !bannedTags.includes(tag));
       
     return tags;
   } catch (err) {

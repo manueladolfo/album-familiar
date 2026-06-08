@@ -619,20 +619,51 @@ export default function PhotosPage() {
         const cleanPhotoId = nameWithoutExt.split(".")[0];
         const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
 
+        let dbUpdated = false;
+
         if (isValidUUID(photoId)) {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from("photos")
             .update({ status: "trash" })
-            .eq("id", photoId);
+            .eq("id", photoId)
+            .select();
 
           if (error) throw error;
-          console.log("Foto movida a la papelera en Supabase correctamente:", photoId);
+          dbUpdated = data && data.length > 0;
         }
+
+        if (!dbUpdated) {
+          // Foto huérfana: existe en storage pero no en la BD. Eliminar archivos directamente.
+          console.warn(`[Trash] Foto "${photoName}" no encontrada en BD. Eliminando del storage directamente.`);
+          
+          // Eliminar thumbnail
+          const { error: thumbDelError } = await supabase.storage
+            .from("family-album")
+            .remove([`thumbnails/${photoName}`]);
+          if (thumbDelError) console.warn("[Trash] Error al borrar thumbnail:", thumbDelError);
+
+          // Intentar eliminar posibles originales (probamos extensiones comunes)
+          const possibleExts = ["jpg", "jpeg", "png", "heic", "webp"];
+          const possibleOriginals = possibleExts.map(ext => `originals/${cleanPhotoId}.${ext}`);
+          const { error: origDelError } = await supabase.storage
+            .from("family-album")
+            .remove(possibleOriginals);
+          if (origDelError) console.warn("[Trash] Error al borrar originales:", origDelError);
+
+          console.log(`[Trash] Archivos de storage eliminados para foto huérfana "${photoName}"`);
+        } else {
+          console.log(`[Trash] Foto "${photoId}" movida a la papelera en BD`);
+        }
+
+        setUploadStatus({ type: "success", message: "Foto eliminada correctamente" });
+        setTimeout(() => setUploadStatus(null), 3000);
         
         window.dispatchEvent(new CustomEvent("photo-moved"));
         await fetchPhotos();
-      } catch (err) {
-        console.error("Fallo al mover a papelera en Supabase:", err);
+      } catch (err: any) {
+        console.error("[Trash] Fallo al mover a papelera:", err);
+        setUploadStatus({ type: "error", message: `Error al eliminar: ${err?.message || String(err)}` });
+        setTimeout(() => setUploadStatus(null), 4000);
       }
     } else {
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
