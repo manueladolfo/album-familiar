@@ -365,163 +365,173 @@ export default function PhotosPage() {
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    const file = files[0];
-    if (!file.type.startsWith("image/")) {
-      setUploadStatus({
-        type: "error",
-        message: "Por favor, selecciona únicamente archivos de imagen.",
-      });
-      return;
-    }
-
     try {
       setUploading(true);
       setUploadStatus(null);
 
-      const fileExt = file.name.split(".").pop();
-      const cleanFileName = file.name
-        .replace(/\.[^/.]+$/, "")
-        .replace(/[^a-zA-Z0-9]/g, "_")
-        .toLowerCase();
-      const uniqueName = `${Date.now()}_${cleanFileName}`;
+      let successCount = 0;
+      let errorCount = 0;
 
-      const compressedBlob = await compressImage(file);
-
-      // Convertir a Base64 de antemano para Gemini
-      const base64Image: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Error al convertir imagen a base64"));
-        reader.readAsDataURL(compressedBlob);
-      });
-
-      // Extraer metadatos GPS de la imagen original usando exifr
-      let latitude: number | null = null;
-      let longitude: number | null = null;
-      try {
-        const gps = await exifr.gps(file);
-        if (gps) {
-          latitude = gps.latitude;
-          longitude = gps.longitude;
-          console.log("Coordenadas GPS extraídas con éxito:", latitude, longitude);
-        }
-      } catch (exifErr) {
-        console.warn("No se encontraron metadatos GPS EXIF en esta foto:", exifErr);
-      }
-
-      let uploadSuccess = false;
-      const thumbnailName = `${uniqueName}.${fileExt}.webp`;
-
-      // 1. Intentar subir imagen original a Supabase
-      try {
-        const originalPath = `originals/${uniqueName}.${fileExt}`;
-        const { error: origError } = await supabase.storage
-          .from("family-album")
-          .upload(originalPath, file, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        if (origError) throw origError;
-
-        // 2. Intentar subir miniatura comprimida (WebP)
-        const thumbnailPath = `thumbnails/${thumbnailName}`;
-        const { error: thumbError } = await supabase.storage
-          .from("family-album")
-          .upload(thumbnailPath, compressedBlob, {
-            contentType: "image/webp",
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        if (thumbError) {
-          await supabase.storage.from("family-album").remove([originalPath]);
-          throw thumbError;
-        }
-
-        // 3. Registrar en base de datos con UUID válido
-        try {
-          await supabase.from("photos").insert({
-            id: generateUUID(),
-            album_id: null,
-            status: "active",
-            latitude: latitude,
-            longitude: longitude,
-          });
-        } catch {
-          // Fallback de mapeo si la DB falla pero el storage no
-          const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-          const localStatusMappings = JSON.parse(localStatusMappingsJson);
-          localStatusMappings[thumbnailName] = "active";
-          localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith("image/")) {
+          console.warn("Archivo omitido porque no es una imagen:", file.name);
+          errorCount++;
+          continue;
         }
 
         setUploadStatus({
           type: "success",
-          message: "¡Foto subida y optimizada correctamente a la nube (Supabase)!",
+          message: `Procesando y subiendo foto ${i + 1} de ${files.length}: "${file.name}"...`,
         });
-        uploadSuccess = true;
-        
-        // Evaluar IA y GPS en segundo plano
-        triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude);
-        await fetchPhotos();
-      } catch (err) {
-        console.warn("Fallo al subir a Supabase. Activando almacenamiento local de respaldo...", err instanceof Error ? err.message : String(err));
-      }
 
-      // Si no se subió a Supabase, guardamos localmente como fallback
-      if (!uploadSuccess) {
-        const localThumbnailName = `${uniqueName}.webp`;
+        const fileExt = file.name.split(".").pop();
+        const cleanFileName = file.name
+          .replace(/\.[^/.]+$/, "")
+          .replace(/[^a-zA-Z0-9]/g, "_")
+          .toLowerCase();
+        const uniqueName = `${Date.now()}_${cleanFileName}`;
+
+        const compressedBlob = await compressImage(file);
+
+        // Convertir a Base64 de antemano para Gemini
+        const base64Image: string = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error("Error al convertir imagen a base64"));
+          reader.readAsDataURL(compressedBlob);
+        });
+
+        // Extraer metadatos GPS de la imagen original usando exifr
+        let latitude: number | null = null;
+        let longitude: number | null = null;
         try {
-          const newPhoto: PhotoItem = {
-            name: localThumbnailName,
-            url: base64Image,
-            created_at: new Date().toISOString(),
-            album_id: null,
-            status: "active",
-            latitude: latitude,
-            longitude: longitude,
-          };
-
-          // Guardar en family_album_local_photos
-          const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-          const localPhotos = JSON.parse(localPhotosJson);
-          localPhotos.unshift(newPhoto);
-          localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
-
-          // Guardar estado
-          const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-          const localStatusMappings = JSON.parse(localStatusMappingsJson);
-          localStatusMappings[localThumbnailName] = "active";
-          localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
-
-          setUploadStatus({
-            type: "success",
-            message: "¡Foto optimizada y guardada localmente (almacenamiento del navegador)!",
-          });
-          
-          // Evaluar IA y GPS en segundo plano
-          triggerAIEvaluation(localThumbnailName, base64Image, latitude, longitude);
-        } catch (fallbackErr) {
-          console.error("Fallo al guardar en LocalStorage:", fallbackErr);
-          setUploadStatus({
-            type: "error",
-            message: `Fallo al guardar la foto localmente: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`,
-          });
-        } finally {
-          await fetchPhotos();
-          setUploading(false);
+          const gps = await exifr.gps(file);
+          if (gps) {
+            latitude = gps.latitude;
+            longitude = gps.longitude;
+            console.log("Coordenadas GPS extraídas con éxito:", latitude, longitude);
+          }
+        } catch (exifErr) {
+          console.warn("No se encontraron metadatos GPS EXIF en esta foto:", exifErr);
         }
-      } else {
-        setUploading(false);
+
+        let uploadSuccess = false;
+        const thumbnailName = `${uniqueName}.${fileExt}.webp`;
+
+        // 1. Intentar subir imagen original a Supabase
+        try {
+          const originalPath = `originals/${uniqueName}.${fileExt}`;
+          const { error: origError } = await supabase.storage
+            .from("family-album")
+            .upload(originalPath, file, {
+              cacheControl: "3600",
+              upsert: false,
+            });
+
+          if (origError) throw origError;
+
+          // 2. Intentar subir miniatura comprimida (WebP)
+          const thumbnailPath = `thumbnails/${thumbnailName}`;
+          const { error: thumbError } = await supabase.storage
+            .from("family-album")
+            .upload(thumbnailPath, compressedBlob, {
+              contentType: "image/webp",
+              cacheControl: "3600",
+              upsert: false,
+            });
+
+          if (thumbError) {
+            await supabase.storage.from("family-album").remove([originalPath]);
+            throw thumbError;
+          }
+
+          // 3. Registrar en base de datos con UUID válido
+          try {
+            await supabase.from("photos").insert({
+              id: generateUUID(),
+              album_id: null,
+              status: "active",
+              latitude: latitude,
+              longitude: longitude,
+            });
+          } catch {
+            // Fallback de mapeo si la DB falla pero el storage no
+            const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+            const localStatusMappings = JSON.parse(localStatusMappingsJson);
+            localStatusMappings[thumbnailName] = "active";
+            localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
+          }
+
+          uploadSuccess = true;
+          // Evaluar IA y GPS en segundo plano
+          triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude);
+        } catch (err) {
+          console.warn("Fallo al subir a Supabase. Activando almacenamiento local de respaldo...", err instanceof Error ? err.message : String(err));
+        }
+
+        // Si no se subió a Supabase, guardamos localmente como fallback
+        if (!uploadSuccess) {
+          const localThumbnailName = `${uniqueName}.webp`;
+          try {
+            const newPhoto: PhotoItem = {
+              name: localThumbnailName,
+              url: base64Image,
+              created_at: new Date().toISOString(),
+              album_id: null,
+              status: "active",
+              latitude: latitude,
+              longitude: longitude,
+            };
+
+            // Guardar en family_album_local_photos
+            const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+            const localPhotos = JSON.parse(localPhotosJson);
+            localPhotos.unshift(newPhoto);
+            localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
+
+            // Guardar estado
+            const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+            const localStatusMappings = JSON.parse(localStatusMappingsJson);
+            localStatusMappings[localThumbnailName] = "active";
+            localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
+
+            uploadSuccess = true;
+            // Evaluar IA y GPS en segundo plano
+            triggerAIEvaluation(localThumbnailName, base64Image, latitude, longitude);
+          } catch (fallbackErr) {
+            console.error("Fallo al guardar en LocalStorage:", fallbackErr);
+            errorCount++;
+          }
+        }
+
+        if (uploadSuccess) {
+          successCount++;
+        } else {
+          errorCount++;
+        }
       }
 
+      await fetchPhotos();
+
+      if (errorCount === 0) {
+        setUploadStatus({
+          type: "success",
+          message: `¡Se subieron y optimizaron con éxito ${successCount} fotos!`,
+        });
+      } else {
+        setUploadStatus({
+          type: "error",
+          message: `Subida completada: ${successCount} fotos subidas con éxito, ${errorCount} fallaron.`,
+        });
+      }
     } catch (error) {
       console.error("Error general en el proceso de subida:", error);
       setUploadStatus({
         type: "error",
-        message: error instanceof Error ? error.message : "Error al procesar la imagen.",
+        message: error instanceof Error ? error.message : "Error al procesar las imágenes.",
       });
+    } finally {
       setUploading(false);
     }
   };
@@ -613,6 +623,7 @@ export default function PhotosPage() {
             onChange={(e) => handleUpload(e.target.files)}
             className="hidden"
             accept="image/*"
+            multiple
           />
 
           <div className="w-12 h-12 border border-brand-navy/35 text-brand-navy rounded-full flex items-center justify-center bg-transparent">
