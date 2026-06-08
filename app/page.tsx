@@ -37,6 +37,11 @@ interface LocalPhotoItem {
   title?: string;
 }
 
+interface PhotoStory {
+  chronicle: string;
+  anecdote: string;
+}
+
 const SAMPLE_PHOTOS: SamplePhoto[] = [
   {
     id: "sample_picnic_1988",
@@ -175,6 +180,11 @@ export default function Home() {
   const [newPersonName, setNewPersonName] = useState<string>("");
   const [selectedPhotoNamesForNewPerson, setSelectedPhotoNamesForNewPerson] = useState<string[]>([]);
   const [newPersonIsGroup, setNewPersonIsGroup] = useState<boolean>(false);
+
+  // Estados para Diario de Historias Familiares
+  const [photoStories, setPhotoStories] = useState<Record<string, PhotoStory>>({});
+  const [selectedDiaryPhoto, setSelectedDiaryPhoto] = useState<PhotoItem | null>(null);
+  const [editingAnecdote, setEditingAnecdote] = useState<string>("");
 
   const currentCarouselPhotos = libraryPhotos.length > 0 ? libraryPhotos : SAMPLE_PHOTOS;
 
@@ -318,6 +328,9 @@ export default function Home() {
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
 
+      const storiesJson = localStorage.getItem("family_album_photo_stories") || "{}";
+      setPhotoStories(JSON.parse(storiesJson));
+
       const savedRotations = localStorage.getItem("family_album_photo_rotations");
       if (savedRotations) {
         setRotations(JSON.parse(savedRotations));
@@ -459,6 +472,44 @@ export default function Home() {
       type: "success",
       text: isGroup ? `Grupo "${name}" eliminado correctamente.` : `Perfil de "${name}" eliminado correctamente.`
     });
+  };
+
+  // Genera un relato nostálgico evocador simulando IA basado en metadatos y contexto
+  const generateChronicle = (photo: PhotoItem) => {
+    const year = photo.created_at ? new Date(photo.created_at).getFullYear().toString() : "";
+    const cleanName = photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "");
+    const photoTitle = (photoMetadata[photo.name] as any)?.title || cleanName || photo.name;
+    const albumName = albums.find((a) => a.id === photo.album_id)?.name;
+    const meta = photoMetadata[photo.name];
+    const locationStr = meta?.location || "";
+    
+    // Lista de plantillas poéticas basadas en el tipo de foto y etiquetas
+    const templates = [
+      `Aquel recuerdo de ${year ? `año ${year}` : "días lejanos"}${locationStr ? ` en ${locationStr}` : ""} quedó grabado como un tesoro de la familia. La fotografía captura una calidez única que trasciende el papel, recordándonos los momentos donde el tiempo parecía detenerse para dejarnos sonreír de corazón.`,
+      `El instante inmortalizado en "${photoTitle}"${year ? ` en el año ${year}` : ""} evoca el calor del hogar familiar. ${albumName ? `Bajo el cobijo del álbum "${albumName}", este` : "Este"} recuerdo permanece intacto para hablarnos de la complicidad y el amor compartido entre risas y miradas sinceras.`,
+      `Hay días que se graban en el alma, y esta foto ${locationStr ? `tomada en ${locationStr}` : ""}${year ? ` (${year})` : ""} es el perfecto testigo de ello. Cada detalle en la imagen nos transporta a una tarde llena de anécdotas, el aroma a nostalgia y el eco de las voces de los que más queremos reunidos en comunión.`,
+      `Una postal del baúl de los recuerdos que nos susurra historias de felicidad sencilla. La luz que baña "${photoTitle}"${year ? ` en aquel lejano ${year}` : ""} retrata no solo rostros, sino un fragmento irrepetible del largo viaje que hemos recorrido juntos como familia.`
+    ];
+
+    // Elegir plantilla de forma consistente usando el nombre del archivo como semilla
+    let hash = 0;
+    for (let i = 0; i < photo.name.length; i++) {
+      hash = photo.name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % templates.length;
+    return templates[index];
+  };
+
+  // Guardar la anécdota personal y crónica del diario
+  const handleSaveStory = (photoName: string, chronicleText: string, anecdoteText: string) => {
+    const updatedStories = { ...photoStories };
+    updatedStories[photoName] = {
+      chronicle: chronicleText,
+      anecdote: anecdoteText
+    };
+    setPhotoStories(updatedStories);
+    localStorage.setItem("family_album_photo_stories", JSON.stringify(updatedStories));
+    setFeedback({ type: "success", text: "Anécdota del diario guardada correctamente." });
   };
 
   // Sembrar todos los ejemplos locales
@@ -910,14 +961,14 @@ export default function Home() {
 
       </div>
 
-      {/* CATÁLOGO DE RECUERDOS DISPONIBLES (Original Dashboard) */}
+      {/* DIARIO DE HISTORIAS FAMILIARES */}
       <div className="space-y-6 bg-transparent pt-6 border-t border-brand-navy/10">
         <div className="space-y-1 bg-transparent">
-          <h3 className="text-lg font-medium text-brand-navy tracking-tight">Catálogo de Recuerdos</h3>
+          <h3 className="text-lg font-medium text-brand-navy tracking-tight">Diario de Historias Familiares</h3>
           <p className="text-xs text-brand-navy/50">
             {libraryPhotos.length > 0
-              ? "Explora, visualiza y gestiona las fotografías activas de tu biblioteca."
-              : "Selecciona e importa imágenes específicas del catálogo a tu biblioteca del álbum."}
+              ? "Explora el alma de tus recuerdos. Revive las crónicas del baúl familiar y guarda anécdotas escritas de tu propia voz para que no se pierdan en el tiempo."
+              : "No tienes recuerdos en tu biblioteca. Importa imágenes de muestra del catálogo para comenzar a narrar tus historias familiares."}
           </p>
         </div>
 
@@ -950,12 +1001,16 @@ export default function Home() {
                   const cleanName = photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "");
                   const photoTitle = (photoMetadata[photo.name] as any)?.title || cleanName || photo.name;
                   const albumName = albums.find((a) => a.id === photo.album_id)?.name;
-                  const carouselIndex = libraryPhotos.findIndex((p) => p.name === photo.name);
+                  
+                  const savedStory = photoStories[photo.name];
+                  const hasAnecdote = !!savedStory?.anecdote;
+                  const chronicleText = savedStory?.chronicle || generateChronicle(photo);
+                  const previewText = hasAnecdote ? savedStory.anecdote : chronicleText;
 
                   return (
                     <div
                       key={photo.name}
-                      className="group border border-brand-navy/10 bg-brand-cream/50 rounded-xs overflow-hidden hover:border-brand-navy/30 transition-all duration-300 flex flex-col justify-between"
+                      className="group border border-brand-navy/10 bg-brand-cream/50 rounded-xs overflow-hidden hover:border-brand-navy/35 hover:shadow-md transition-all duration-300 flex flex-col justify-between"
                     >
                       <div className="aspect-video relative overflow-hidden bg-brand-navy/5">
                         <img
@@ -966,31 +1021,20 @@ export default function Home() {
                           loading="lazy"
                         />
                         {year && (
-                          <div className="absolute top-3 right-3 bg-brand-cream/90 backdrop-blur-xs text-brand-navy text-[10px] font-semibold px-2 py-0.5 rounded-xs">
+                          <div className="absolute top-3 right-3 bg-brand-cream/90 backdrop-blur-xs text-brand-navy text-[10px] font-semibold px-2 py-0.5 rounded-xs shadow-sm">
                             {year}
                           </div>
                         )}
 
-                        {/* Hover overlay translúcido con desenfoque de cristal (sin nombre) */}
+                        {hasAnecdote && (
+                          <div className="absolute top-3 left-3 bg-brand-navy/90 backdrop-blur-xs text-brand-cream text-[9px] font-bold px-2 py-0.5 rounded-xs flex items-center gap-1 shadow-md">
+                            <span>✍️</span> Con anécdota
+                          </div>
+                        )}
+
+                        {/* Hover overlay translúcido con desenfoque de cristal */}
                         <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
                           <div className="flex justify-end gap-1.5 bg-transparent">
-                            {/* Botón Ver en Pantalla Completa */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (carouselIndex !== -1) {
-                                  setActiveCollectionIndex(carouselIndex);
-                                  setIsFullscreenCarousel(true);
-                                }
-                              }}
-                              className="p-2 border border-brand-cream/20 hover:bg-brand-cream/10 text-brand-cream rounded-xs transition-all cursor-pointer"
-                              title="Ver en pantalla completa"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m-11.25 11.25v-4.5m0 4.5h4.5m-4.5 0L9 15m11.25 5.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
-                              </svg>
-                            </button>
-
                             {/* Botón Mover a Papelera */}
                             <button
                               onClick={(e) => {
@@ -1019,33 +1063,31 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div className="p-4 space-y-4 flex-1 flex flex-col justify-between bg-transparent">
-                        <div className="space-y-1 bg-transparent text-left">
-                          <h4 className="text-xs font-semibold text-brand-navy/90 tracking-wide uppercase truncate">
-                            {photoTitle}
-                          </h4>
-                          <p className="text-[11px] text-brand-navy/50 capitalize bg-transparent">
-                            Álbum: <span className="font-medium text-brand-timber">{albumName || "Sin álbum"}</span>
+                      <div className="p-4 space-y-3 flex-1 flex flex-col justify-between bg-transparent">
+                        <div className="space-y-1.5 bg-transparent text-left">
+                          <div className="flex items-center justify-between bg-transparent">
+                            <h4 className="text-xs font-bold text-brand-navy/90 tracking-wide uppercase truncate max-w-[200px]">
+                              {photoTitle}
+                            </h4>
+                          </div>
+                          <p className="text-[10px] text-brand-navy/55 capitalize bg-transparent">
+                            Álbum: <span className="font-semibold text-brand-timber">{albumName || "Sin álbum"}</span>
+                          </p>
+                          {/* Vista previa del texto de la crónica o anécdota */}
+                          <p className="text-[11px] text-brand-navy/70 line-clamp-2 italic leading-relaxed pt-1 border-t border-brand-navy/5">
+                            {previewText}
                           </p>
                         </div>
 
-                        <div className="flex gap-2 bg-transparent">
+                        <div className="pt-2 bg-transparent">
                           <button
                             onClick={() => {
-                              if (carouselIndex !== -1) {
-                                setActiveCollectionIndex(carouselIndex);
-                                setIsFullscreenCarousel(true);
-                              }
+                              setSelectedDiaryPhoto(photo);
+                              setEditingAnecdote(photoStories[photo.name]?.anecdote || "");
                             }}
-                            className="flex-1 py-1.5 text-[11px] font-semibold rounded-xs border border-brand-navy text-brand-navy hover:bg-brand-navy hover:text-brand-cream text-center transition-all cursor-pointer"
+                            className="w-full py-1.5 text-[11px] font-bold rounded-xs bg-brand-navy text-brand-cream hover:bg-brand-navy/95 text-center transition-all cursor-pointer shadow-xs"
                           >
-                            Ver en Pantalla Completa
-                          </button>
-                          <button
-                            onClick={() => moveToTrashFromHome(photo.name)}
-                            className="py-1.5 px-3 text-[11px] font-semibold rounded-xs border border-red-400 hover:bg-red-500 hover:text-brand-cream text-red-500 text-center transition-all cursor-pointer"
-                          >
-                            Borrar
+                            {hasAnecdote ? "✍️ Leer y Editar Anécdota" : "📖 Leer Historia y Narrar"}
                           </button>
                         </div>
                       </div>
@@ -1115,7 +1157,7 @@ export default function Home() {
 
                     <div className="p-4 space-y-4 flex-1 flex flex-col justify-between bg-transparent">
                       <div className="space-y-1 bg-transparent text-left">
-                        <h4 className="text-xs font-semibold text-brand-navy/90 tracking-wide uppercase">
+                        <h4 className="text-xs font-semibold text-brand-navy/90 tracking-wide uppercase truncate">
                           {photo.title}
                         </h4>
                         <p className="text-[11px] text-brand-navy/50 capitalize bg-transparent">
@@ -1645,6 +1687,96 @@ export default function Home() {
             />
           </div>
 
+        </div>
+      )}
+
+      {/* MODAL DIARIO DE HISTORIAS FAMILIARES (SCRAPBOOK INTERACTIVO) */}
+      {selectedDiaryPhoto && (
+        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-brand-cream border border-brand-navy/25 rounded-xs p-6 max-w-4xl w-full max-h-[90vh] flex flex-col md:flex-row gap-6 shadow-2xl animate-in zoom-in-95 duration-200 overflow-y-auto md:overflow-visible">
+            
+            {/* Lateral Izquierdo: Fotografía */}
+            <div className="flex-1 flex flex-col justify-center items-center bg-brand-navy/5 rounded-xs border border-brand-navy/10 p-4 min-h-[300px] md:max-h-[75vh] relative overflow-hidden">
+              <div className="absolute top-3 right-3 z-10 flex gap-2">
+                {selectedDiaryPhoto.created_at && (
+                  <span className="bg-brand-timber text-brand-cream text-[9px] font-bold px-2 py-0.5 rounded-xs shadow-sm">
+                    {new Date(selectedDiaryPhoto.created_at).getFullYear()}
+                  </span>
+                )}
+              </div>
+              <img
+                src={selectedDiaryPhoto.url}
+                alt={selectedDiaryPhoto.name}
+                className="max-w-full max-h-[45vh] object-contain shadow-md rounded-xs transition-transform duration-300"
+                style={{ transform: `rotate(${rotations[selectedDiaryPhoto.name] || 0}deg)` }}
+              />
+            </div>
+
+            {/* Lateral Derecho: Crónica y Anécdota */}
+            <div className="flex-1 flex flex-col justify-between bg-transparent min-w-[280px]">
+              
+              <div className="space-y-6 bg-transparent flex-1 overflow-y-auto pr-1 scrollbar-thin md:max-h-[60vh]">
+                {/* Header */}
+                <div className="pb-3 border-b border-brand-navy/10 bg-transparent">
+                  <h3 className="text-base font-bold text-brand-navy uppercase tracking-wide">
+                    {(photoMetadata[selectedDiaryPhoto.name] as any)?.title || 
+                      selectedDiaryPhoto.name.split("_").slice(1).join("_").replace(/\.webp$/, "") || 
+                      selectedDiaryPhoto.name}
+                  </h3>
+                  <p className="text-[10px] text-brand-navy/50">
+                    {selectedDiaryPhoto.created_at ? new Date(selectedDiaryPhoto.created_at).toLocaleDateString("es-ES") : ""}
+                    {photoMetadata[selectedDiaryPhoto.name]?.location && ` • 📍 ${photoMetadata[selectedDiaryPhoto.name].location}`}
+                  </p>
+                </div>
+
+                {/* Crónica Automatizada de IA */}
+                <div className="space-y-2 bg-brand-cream/80 border border-brand-navy/10 rounded-xs p-4">
+                  <h4 className="text-[10px] font-bold text-brand-timber uppercase tracking-wider flex items-center gap-1.5">
+                    📜 Crónica Narrativa Familiar
+                  </h4>
+                  <p className="text-xs text-brand-navy/85 italic leading-relaxed font-serif">
+                    {photoStories[selectedDiaryPhoto.name]?.chronicle || generateChronicle(selectedDiaryPhoto)}
+                  </p>
+                </div>
+
+                {/* Anécdota Personal */}
+                <div className="space-y-2 bg-transparent">
+                  <label className="text-[10px] font-bold text-brand-navy/70 uppercase tracking-wider block">
+                    ✍️ Tu Anécdota Personal
+                  </label>
+                  <textarea
+                    value={editingAnecdote}
+                    onChange={(e) => setEditingAnecdote(e.target.value)}
+                    placeholder="¿Quién estaba allí? ¿Qué música sonaba? Escribe aquí tu recuerdo sobre este día para conservarlo..."
+                    className="w-full h-32 px-3 py-2 bg-transparent border border-brand-navy/20 focus:border-brand-navy text-xs rounded-xs outline-none text-brand-navy font-medium placeholder:text-brand-navy/35 leading-relaxed resize-none scrollbar-thin"
+                    maxLength={1000}
+                  />
+                </div>
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="pt-4 border-t border-brand-navy/10 flex justify-end gap-3 bg-transparent">
+                <button
+                  onClick={() => setSelectedDiaryPhoto(null)}
+                  className="py-1.5 px-4 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy text-xs font-medium rounded-xs transition-all cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => {
+                    const chronicle = photoStories[selectedDiaryPhoto.name]?.chronicle || generateChronicle(selectedDiaryPhoto);
+                    handleSaveStory(selectedDiaryPhoto.name, chronicle, editingAnecdote);
+                    setSelectedDiaryPhoto(null);
+                  }}
+                  className="py-1.5 px-4 bg-brand-navy text-brand-cream hover:bg-brand-navy/90 text-xs font-semibold rounded-xs transition-all cursor-pointer"
+                >
+                  Guardar Recuerdo
+                </button>
+              </div>
+
+            </div>
+
+          </div>
         </div>
       )}
 
