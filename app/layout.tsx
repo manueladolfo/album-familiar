@@ -11,6 +11,16 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: "Álbum Familiar",
   description: "Una aplicación para organizar, compartir y preservar recuerdos familiares.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Álbum Familiar",
+  },
+  icons: {
+    icon: "/logo-familiar-transparente.png",
+    shortcut: "/logo-familiar-transparente.png",
+    apple: "/logo-familiar.png",
+  },
 };
 
 export const viewport: Viewport = {
