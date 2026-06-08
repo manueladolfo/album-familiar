@@ -29,7 +29,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setIsLocalMode(localStorage.getItem("family_album_local_mode_active") === "true");
+      // Intentar siempre online por defecto al abrir o recargar la aplicación
+      localStorage.removeItem("family_album_local_mode_active");
+      setIsLocalMode(false);
+      window.dispatchEvent(new CustomEvent("local-mode-changed"));
     }
   }, []);
 
@@ -398,6 +401,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
               <button
                 onClick={() => {
+                  localStorage.removeItem("family_album_local_mode_active");
                   window.location.reload();
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xs text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors shadow-sm"

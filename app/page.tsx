@@ -280,7 +280,6 @@ export default function Home() {
             }
           } catch (err) {
             console.error("Fallo al conectar con Supabase en el inicio:", err);
-            window.dispatchEvent(new CustomEvent("supabase-connection-error"));
             return;
           }
         } else {
@@ -571,7 +570,6 @@ export default function Home() {
         setFeedback({ type: "success", text: "Foto movida a la papelera." });
       } catch (err) {
         console.error("Fallo al mover a papelera en Supabase desde inicio:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";

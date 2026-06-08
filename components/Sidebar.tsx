@@ -172,7 +172,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         window.dispatchEvent(new CustomEvent("refresh-albums"));
       } catch (err) {
         console.error("Fallo al crear álbum en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
@@ -210,7 +209,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         window.dispatchEvent(new CustomEvent("refresh-albums"));
       } catch (err) {
         console.error("Fallo al renombrar álbum en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
@@ -253,7 +251,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         }
       } catch (err) {
         console.error("Fallo al eliminar álbum en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
@@ -310,7 +307,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         if (data) setAlbums(data);
       } catch (err) {
         console.error("Fallo al cargar álbumes de Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
@@ -525,7 +521,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         }
       } catch (err) {
         console.error("Fallo al actualizar en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";

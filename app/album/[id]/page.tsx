@@ -77,7 +77,6 @@ export default function AlbumPage({ params }: PageProps) {
         await fetchAlbumData();
       } catch (err) {
         console.error("Fallo al quitar del álbum en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
@@ -117,7 +116,6 @@ export default function AlbumPage({ params }: PageProps) {
           }
         } catch (err) {
           console.error("Error al obtener nombre de álbum en Supabase:", err);
-          window.dispatchEvent(new CustomEvent("supabase-connection-error"));
         }
       } else {
         const localAlbums = localStorage.getItem("family_album_local_albums");
@@ -189,7 +187,6 @@ export default function AlbumPage({ params }: PageProps) {
           }
         } catch (err) {
           console.error("Fallo al conectar con Supabase Storage en el álbum:", err);
-          window.dispatchEvent(new CustomEvent("supabase-connection-error"));
           return;
         }
       } else {
@@ -457,7 +454,6 @@ export default function AlbumPage({ params }: PageProps) {
           } catch (err) {
             console.error("Fallo al subir a Supabase en modo online:", err);
             errorCount++;
-            window.dispatchEvent(new CustomEvent("supabase-connection-error"));
             break;
           }
         } else {

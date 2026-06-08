@@ -75,7 +75,6 @@ export default function TrashPage() {
           }
         } catch (err) {
           console.error("Fallo al conectar con Supabase en la papelera:", err);
-          window.dispatchEvent(new CustomEvent("supabase-connection-error"));
           return;
         }
       } else {
@@ -157,7 +156,6 @@ export default function TrashPage() {
         await fetchTrashPhotos();
       } catch (err) {
         console.error("Fallo al restaurar en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
@@ -224,7 +222,6 @@ export default function TrashPage() {
         setPhotos([]);
       } catch (err: any) {
         console.error("Fallo al vaciar papelera en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       } finally {
         setDeleting(false);
       }
@@ -321,7 +318,6 @@ export default function TrashPage() {
         await fetchTrashPhotos();
       } catch (err: any) {
         console.error("Fallo al borrar foto en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       } finally {
         setDeleting(false);
       }

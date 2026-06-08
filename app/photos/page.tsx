@@ -152,7 +152,6 @@ export default function PhotosPage() {
         }
       } catch (err) {
         console.error("Fallo al actualizar en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       // MODO LOCAL: Solo LocalStorage
@@ -184,7 +183,6 @@ export default function PhotosPage() {
       }
     } catch (err) {
       console.error("Error al cargar álbumes de Supabase:", err);
-      window.dispatchEvent(new CustomEvent("supabase-connection-error"));
     }
   };
 
@@ -250,7 +248,6 @@ export default function PhotosPage() {
           }
         } catch (err) {
           console.error("Error al cargar fotos de Supabase:", err);
-          window.dispatchEvent(new CustomEvent("supabase-connection-error"));
           return;
         }
       } else {
@@ -511,7 +508,6 @@ export default function PhotosPage() {
           } catch (err) {
             console.error("Fallo al subir a Supabase en modo online:", err);
             errorCount++;
-            window.dispatchEvent(new CustomEvent("supabase-connection-error"));
             break;
           }
         } else {
@@ -595,7 +591,6 @@ export default function PhotosPage() {
         await fetchPhotos();
       } catch (err) {
         console.error("Fallo al mover a papelera en Supabase:", err);
-        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
     } else {
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
