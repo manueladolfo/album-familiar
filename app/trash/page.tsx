@@ -256,6 +256,81 @@ export default function TrashPage() {
     }
   };
 
+  // Borrar una sola foto definitivamente de la papelera
+  const deleteSinglePhoto = async (photoName: string) => {
+    try {
+      setDeleting(true);
+      setStatusMessage(null);
+
+      const nameWithoutWebp = photoName.replace(/\.webp$/, "");
+      const pathsToDeleteFromStorage = [
+        `thumbnails/${photoName}`,
+        `originals/${nameWithoutWebp}.jpg`,
+        `originals/${nameWithoutWebp}.jpeg`,
+        `originals/${nameWithoutWebp}.png`,
+        `originals/${nameWithoutWebp}.webp`,
+      ];
+
+      // 1. Borrar en Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from("family-album")
+        .remove(pathsToDeleteFromStorage);
+
+      if (storageError) {
+        console.warn("Error al borrar archivo de Storage:", storageError.message);
+      }
+
+      // 2. Borrar registro de Supabase Database (si es UUID válido)
+      if (isValidUUID(photoName)) {
+        try {
+          const { error: dbError } = await supabase
+            .from("photos")
+            .delete()
+            .eq("id", photoName);
+          if (dbError) throw dbError;
+        } catch {
+          console.warn("Error al borrar de base de datos de Supabase (RLS). Continuando localmente...");
+        }
+      }
+
+      // 3. Borrar de LocalStorage
+      const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+      const localStatusMappings = JSON.parse(localStatusMappingsJson);
+      
+      const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+      const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
+
+      delete localStatusMappings[photoName];
+      delete localAlbumMappings[photoName];
+
+      localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
+      localStorage.setItem("family_album_photo_mappings", JSON.stringify(localAlbumMappings));
+
+      // También borrar del array de fotos locales
+      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+      let localPhotos = JSON.parse(localPhotosJson);
+      localPhotos = localPhotos.filter((p: any) => p.name !== photoName);
+      localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
+
+      setStatusMessage({
+        type: "success",
+        text: "La foto ha sido eliminada definitivamente.",
+      });
+
+      // Notificar cambio
+      window.dispatchEvent(new CustomEvent("photo-moved"));
+      await fetchTrashPhotos();
+    } catch (err: any) {
+      console.error("Error al borrar foto:", err);
+      setStatusMessage({
+        type: "error",
+        text: err.message || "Error al borrar la foto.",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filteredPhotos = filterPhotos(
     photos,
     searchQuery,
@@ -344,9 +419,9 @@ export default function TrashPage() {
                   loading="lazy"
                 />
                 
-                {/* Hover overlay con restaurar y desenfoque */}
+                {/* Hover overlay con restaurar y borrar */}
                 <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
-                  <div className="flex justify-end bg-transparent">
+                  <div className="flex justify-end gap-1.5 bg-transparent">
                     {/* Botón Restaurar */}
                     <button
                       onClick={() => restorePhoto(photo.name)}
@@ -357,13 +432,21 @@ export default function TrashPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                       </svg>
                     </button>
+
+                    {/* Botón Borrar definitivamente */}
+                    <button
+                      onClick={() => deleteSinglePhoto(photo.name)}
+                      className="p-2 border border-red-400/40 hover:bg-red-500/20 text-red-400 rounded-xs transition-all cursor-pointer"
+                      title="Borrar definitivamente"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                   
                   <div className="bg-transparent">
-                    <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
-                      {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
-                    </p>
-                    <p className="text-brand-cream/70 text-[10px] mt-0.5">
+                    <p className="text-brand-cream/70 text-[10px]">
                       {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
                     </p>
                     {photoMetadata[photo.name] && (
@@ -373,13 +456,22 @@ export default function TrashPage() {
                             📍 {photoMetadata[photo.name].location}
                           </p>
                         )}
-                        {photoMetadata[photo.name].tags && photoMetadata[photo.name].tags.length > 0 && (
-                          <p className="text-[8px] text-brand-cream/60 italic truncate">
-                            🏷️ {photoMetadata[photo.name].tags.slice(0, 4).join(", ")}
-                          </p>
-                        )}
                       </div>
                     )}
+                    <div className="flex gap-2 bg-transparent mt-2">
+                      <button
+                        onClick={() => restorePhoto(photo.name)}
+                        className="flex-1 py-1.5 px-2 border border-brand-cream/30 hover:bg-brand-cream/10 text-brand-cream text-[10px] font-medium rounded-xs text-center transition-all cursor-pointer"
+                      >
+                        Restaurar
+                      </button>
+                      <button
+                        onClick={() => deleteSinglePhoto(photo.name)}
+                        className="flex-1 py-1.5 px-2 border border-red-400/30 hover:bg-red-500/20 text-red-400 text-[10px] font-medium rounded-xs text-center transition-all cursor-pointer"
+                      >
+                        Borrar
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

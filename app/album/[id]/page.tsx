@@ -39,6 +39,52 @@ export default function AlbumPage({ params }: PageProps) {
 
   const [albumCover, setAlbumCover] = useState<string | null>(null);
 
+  // Estado de selección por lotes
+  const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+
+  const toggleSelectPhoto = (photoName: string) => {
+    setSelectedPhotos((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoName)) {
+        next.delete(photoName);
+      } else {
+        next.add(photoName);
+      }
+      return next;
+    });
+  };
+
+  // Quitar foto del álbum (no la borra, solo la desasocia)
+  const removeFromAlbum = async (photoName: string) => {
+    try {
+      if (isValidUUID(photoName) && isValidUUID(id)) {
+        const { error } = await supabase
+          .from("photos")
+          .update({ album_id: null })
+          .eq("id", photoName);
+        if (error) throw error;
+      }
+    } catch {
+      console.warn("Fallo al quitar del álbum en Supabase (RLS). Usando fallback...");
+    } finally {
+      const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+      const mappings = JSON.parse(mappingsJson);
+      delete mappings[photoName];
+      localStorage.setItem("family_album_photo_mappings", JSON.stringify(mappings));
+      window.dispatchEvent(new CustomEvent("photo-moved"));
+      await fetchAlbumData();
+    }
+  };
+
+  const removeSelectedFromAlbum = async () => {
+    for (const photoName of selectedPhotos) {
+      await removeFromAlbum(photoName);
+    }
+    setSelectedPhotos(new Set());
+    setIsSelectMode(false);
+  };
+
   // Obtener nombre del álbum y filtrar fotos
   const fetchAlbumData = async () => {
     try {
@@ -585,6 +631,42 @@ export default function AlbumPage({ params }: PageProps) {
               {searchQuery && ` (filtrado de un total de ${photos.length})`}
             </p>
           </div>
+          <div className="flex items-center gap-3 bg-transparent">
+            {isSelectMode ? (
+              <>
+                <span className="text-[11px] text-brand-navy/60 select-none">
+                  {selectedPhotos.size} seleccionada{selectedPhotos.size !== 1 ? "s" : ""}
+                </span>
+                {selectedPhotos.size > 0 && (
+                  <button
+                    onClick={removeSelectedFromAlbum}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-red-400 text-red-600 hover:bg-red-50 rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Quitar del álbum
+                  </button>
+                )}
+                <button
+                  onClick={() => { setIsSelectMode(false); setSelectedPhotos(new Set()); }}
+                  className="px-3 py-1.5 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setIsSelectMode(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Seleccionar
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -665,11 +747,32 @@ export default function AlbumPage({ params }: PageProps) {
               return (
                 <div
                   key={photo.name}
-                  onClick={() => setActiveLightboxPhoto({ url: originalUrl, name: photo.name })}
-                  className={`group relative aspect-square bg-brand-cream/50 rounded-xs overflow-hidden border transition-all duration-300 cursor-zoom-in select-none ${
-                    isCurrentCover ? "border-brand-navy ring-2 ring-brand-navy" : "border-brand-navy/10 hover:border-brand-navy"
+                  onClick={() => isSelectMode ? toggleSelectPhoto(photo.name) : setActiveLightboxPhoto({ url: originalUrl, name: photo.name })}
+                  className={`group relative aspect-square bg-brand-cream/50 rounded-xs overflow-hidden border transition-all duration-300 select-none ${
+                    isSelectMode
+                      ? selectedPhotos.has(photo.name)
+                        ? "border-brand-navy ring-2 ring-brand-navy cursor-pointer"
+                        : "border-brand-navy/10 hover:border-brand-navy/40 cursor-pointer"
+                      : isCurrentCover
+                        ? "border-brand-navy ring-2 ring-brand-navy cursor-zoom-in"
+                        : "border-brand-navy/10 hover:border-brand-navy cursor-zoom-in"
                   }`}
                 >
+                  {/* Checkbox de selección */}
+                  {isSelectMode && (
+                    <div className={`absolute top-2.5 left-2.5 z-30 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      selectedPhotos.has(photo.name)
+                        ? "bg-brand-navy border-brand-navy"
+                        : "bg-brand-cream/80 border-brand-navy/30"
+                    }`}>
+                      {selectedPhotos.has(photo.name) && (
+                        <svg className="w-3 h-3 text-brand-cream" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  )}
+
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={photo.url}
@@ -680,50 +783,70 @@ export default function AlbumPage({ params }: PageProps) {
                   />
                   
                   {/* Hover overlay con desenfoque de cristal */}
-                  <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-end p-4 z-10">
-                    <div className="bg-transparent mb-2 text-left">
-                      <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
-                        {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
-                      </p>
-                      <p className="text-brand-cream/70 text-[10px] mt-0.5">
-                        {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
-                      </p>
-                      {photoMetadata[photo.name] && (
-                        <div className="bg-transparent space-y-0.5 pt-1">
-                          {photoMetadata[photo.name].location && (
-                            <p className="text-[9px] text-brand-cream/80 truncate flex items-center gap-1">
-                              📍 {photoMetadata[photo.name].location}
-                            </p>
-                          )}
-                          {photoMetadata[photo.name].tags && photoMetadata[photo.name].tags.length > 0 && (
-                            <p className="text-[8px] text-brand-cream/60 italic truncate">
-                              🏷️ {photoMetadata[photo.name].tags.slice(0, 4).join(", ")}
-                            </p>
-                          )}
-                        </div>
-                      )}
+                  {!isSelectMode && (
+                  <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
+                    <div className="flex justify-end bg-transparent">
+                      {/* Botón Quitar del álbum */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromAlbum(photo.name);
+                        }}
+                        className="p-2 border border-red-400/40 hover:bg-red-500/20 text-red-400 rounded-xs transition-all cursor-pointer"
+                        title="Quitar del álbum"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
-                    <div className="flex gap-2 bg-transparent w-full">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveLightboxPhoto({ url: originalUrl, name: photo.name });
-                        }}
-                        className="flex-1 py-1.5 px-2.5 border border-brand-cream/30 hover:bg-brand-cream/10 text-brand-cream text-[10px] sm:text-[11px] font-medium rounded-xs text-center transition-all cursor-pointer"
-                      >
-                        Ver Original
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setAlbumCoverImage(photo.url);
-                        }}
-                        className="py-1.5 px-2.5 bg-brand-cream text-brand-navy hover:bg-brand-navy hover:text-brand-cream text-[10px] sm:text-[11px] font-semibold rounded-xs text-center transition-all cursor-pointer"
-                      >
-                        Portada
-                      </button>
+
+                    <div className="bg-transparent space-y-2">
+                      <div className="bg-transparent text-left">
+                        <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
+                          {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
+                        </p>
+                        <p className="text-brand-cream/70 text-[10px] mt-0.5">
+                          {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
+                        </p>
+                        {photoMetadata[photo.name] && (
+                          <div className="bg-transparent space-y-0.5 pt-1">
+                            {photoMetadata[photo.name].location && (
+                              <p className="text-[9px] text-brand-cream/80 truncate flex items-center gap-1">
+                                📍 {photoMetadata[photo.name].location}
+                              </p>
+                            )}
+                            {photoMetadata[photo.name].tags && photoMetadata[photo.name].tags.length > 0 && (
+                              <p className="text-[8px] text-brand-cream/60 italic truncate">
+                                🏷️ {photoMetadata[photo.name].tags.slice(0, 4).join(", ")}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 bg-transparent w-full">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveLightboxPhoto({ url: originalUrl, name: photo.name });
+                          }}
+                          className="flex-1 py-1.5 px-2.5 border border-brand-cream/30 hover:bg-brand-cream/10 text-brand-cream text-[10px] sm:text-[11px] font-medium rounded-xs text-center transition-all cursor-pointer"
+                        >
+                          Ver Original
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAlbumCoverImage(photo.url);
+                          }}
+                          className="py-1.5 px-2.5 bg-brand-cream text-brand-navy hover:bg-brand-navy hover:text-brand-cream text-[10px] sm:text-[11px] font-semibold rounded-xs text-center transition-all cursor-pointer"
+                        >
+                          Portada
+                        </button>
+                      </div>
                     </div>
                   </div>
+                  )}
 
                   {/* Etiqueta persistente para la portada actual del álbum */}
                   {isCurrentCover && (

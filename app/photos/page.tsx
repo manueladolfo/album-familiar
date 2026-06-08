@@ -82,6 +82,30 @@ export default function PhotosPage() {
   // Estado y manejadores para el menú de asignación rápida de álbum
   const [openAlbumDropdownPhoto, setOpenAlbumDropdownPhoto] = useState<string | null>(null);
 
+  // Estado de selección por lotes
+  const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+
+  const toggleSelectPhoto = (photoName: string) => {
+    setSelectedPhotos((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoName)) {
+        next.delete(photoName);
+      } else {
+        next.add(photoName);
+      }
+      return next;
+    });
+  };
+
+  const moveSelectedToTrash = async () => {
+    for (const photoName of selectedPhotos) {
+      await moveToTrash(photoName);
+    }
+    setSelectedPhotos(new Set());
+    setIsSelectMode(false);
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -687,9 +711,42 @@ export default function PhotosPage() {
               ? "Recuerdos Guardados Recientemente (Últimos 12)"
               : "Fotos de tu biblioteca"}
           </h3>
-          <span className="text-[11px] text-brand-navy/40 bg-transparent select-none">
-            Tip: Arrastra una foto al Sidebar para agregarla a un álbum o haz clic en el corazón para marcarla.
-          </span>
+          <div className="flex items-center gap-3 bg-transparent">
+            {isSelectMode ? (
+              <>
+                <span className="text-[11px] text-brand-navy/60 select-none">
+                  {selectedPhotos.size} seleccionada{selectedPhotos.size !== 1 ? "s" : ""}
+                </span>
+                {selectedPhotos.size > 0 && (
+                  <button
+                    onClick={moveSelectedToTrash}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-red-400 text-red-600 hover:bg-red-50 rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Mover a papelera
+                  </button>
+                )}
+                <button
+                  onClick={() => { setIsSelectMode(false); setSelectedPhotos(new Set()); }}
+                  className="px-3 py-1.5 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setIsSelectMode(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Seleccionar
+              </button>
+            )}
+          </div>
         </div>
         
         {loading ? (
@@ -719,11 +776,31 @@ export default function PhotosPage() {
               return (
                 <div
                   key={photo.name}
-                  draggable
-                  onDragStart={(e) => handlePhotoDragStart(e, photo.name)}
-                  onClick={() => setActiveLightboxPhoto({ url: originalUrl, name: photo.name })}
-                  className="group relative aspect-square bg-brand-cream/50 rounded-xs border border-brand-navy/10 hover:border-brand-navy transition-all duration-300 cursor-zoom-in active:cursor-grabbing select-none overflow-hidden"
+                  draggable={!isSelectMode}
+                  onDragStart={(e) => !isSelectMode && handlePhotoDragStart(e, photo.name)}
+                  onClick={() => isSelectMode ? toggleSelectPhoto(photo.name) : setActiveLightboxPhoto({ url: originalUrl, name: photo.name })}
+                  className={`group relative aspect-square bg-brand-cream/50 rounded-xs border transition-all duration-300 select-none overflow-hidden ${
+                    isSelectMode
+                      ? selectedPhotos.has(photo.name)
+                        ? "border-brand-navy ring-2 ring-brand-navy cursor-pointer"
+                        : "border-brand-navy/10 hover:border-brand-navy/40 cursor-pointer"
+                      : "border-brand-navy/10 hover:border-brand-navy cursor-zoom-in active:cursor-grabbing"
+                  }`}
                 >
+                  {/* Checkbox de selección */}
+                  {isSelectMode && (
+                    <div className={`absolute top-2.5 left-2.5 z-30 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      selectedPhotos.has(photo.name)
+                        ? "bg-brand-navy border-brand-navy"
+                        : "bg-brand-cream/80 border-brand-navy/30"
+                    }`}>
+                      {selectedPhotos.has(photo.name) && (
+                        <svg className="w-3 h-3 text-brand-cream" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  )}
                   {/* Contenedor visual recortado para la imagen y el hover overlay */}
                   <div className="absolute inset-0 rounded-xs overflow-hidden z-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -737,14 +814,51 @@ export default function PhotosPage() {
 
                     {/* Hover overlay con desenfoque de cristal */}
                     <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4">
-                      <div className="flex justify-end bg-transparent">
+                      <div className="flex justify-end gap-1.5 bg-transparent">
+                        {/* Botón de Favorito */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(photo.name);
+                          }}
+                          className="p-2 border border-brand-cream/20 hover:bg-brand-cream/10 rounded-xs transition-all cursor-pointer"
+                          title={favorites.includes(photo.name) ? "Quitar de favoritos" : "Marcar como favorito"}
+                        >
+                          <svg
+                            className={`w-4 h-4 ${
+                              favorites.includes(photo.name) ? "fill-red-500 text-red-500" : "text-brand-cream"
+                            }`}
+                            fill={favorites.includes(photo.name) ? "currentColor" : "none"}
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                        </button>
+
+                        {/* Botón de Añadir a Álbum */}
+                        <button
+                          data-album-dropdown-trigger
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenAlbumDropdownPhoto(openAlbumDropdownPhoto === photo.name ? null : photo.name);
+                          }}
+                          className="p-2 border border-brand-cream/20 hover:bg-brand-cream/10 text-brand-cream rounded-xs transition-all cursor-pointer"
+                          title="Añadir a un álbum..."
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                          </svg>
+                        </button>
+
                         {/* Botón de enviar a la papelera */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             moveToTrash(photo.name);
                           }}
-                          className="p-2 border border-brand-cream/20 hover:bg-brand-cream/10 text-brand-cream rounded-xs transition-all"
+                          className="p-2 border border-red-400/40 hover:bg-red-500/20 text-red-400 rounded-xs transition-all cursor-pointer"
                           title="Mover a la papelera"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -797,43 +911,6 @@ export default function PhotosPage() {
                       {albumName}
                     </div>
                   )}
-
-                  {/* Botón de Favorito */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(photo.name);
-                    }}
-                    className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-brand-cream/90 backdrop-blur-xs border border-brand-navy/15 text-brand-navy hover:scale-105 transition-all cursor-pointer focus:outline-none"
-                    title={favorites.includes(photo.name) ? "Quitar de favoritos" : "Marcar como favorito"}
-                  >
-                    <svg
-                      className={`w-3.5 h-3.5 ${
-                        favorites.includes(photo.name) ? "fill-red-500 text-red-500" : "text-brand-navy/60"
-                      }`}
-                      fill={favorites.includes(photo.name) ? "currentColor" : "none"}
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                    </svg>
-                  </button>
-
-                  {/* Botón de Añadir a Álbum (Cruz/Más) */}
-                  <button
-                    data-album-dropdown-trigger
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpenAlbumDropdownPhoto(openAlbumDropdownPhoto === photo.name ? null : photo.name);
-                    }}
-                    className="absolute top-3 right-11 z-20 p-1.5 rounded-full bg-brand-cream/90 backdrop-blur-xs border border-brand-navy/15 text-brand-navy hover:scale-105 transition-all cursor-pointer focus:outline-none"
-                    title="Añadir a un álbum..."
-                  >
-                    <svg className="w-3.5 h-3.5 text-brand-navy/60" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                  </button>
 
                   {/* Menú Desplegable de Álbumes */}
                   {openAlbumDropdownPhoto === photo.name && (
