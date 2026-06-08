@@ -372,8 +372,11 @@ export default function AlbumPage({ params }: PageProps) {
             longitude = gps.longitude;
             console.log("Coordenadas GPS extraídas con éxito:", latitude, longitude);
           }
-        } catch (exifErr) {
-          console.warn("No se encontraron metadatos GPS EXIF en esta foto:", exifErr);
+        } catch (exifErr: any) {
+          const isUnknownFormat = exifErr?.message?.includes("Unknown file format");
+          if (!isUnknownFormat) {
+            console.warn("No se encontraron metadatos GPS EXIF en esta foto:", exifErr);
+          }
         }
 
         let uploadSuccess = false;
@@ -407,26 +410,14 @@ export default function AlbumPage({ params }: PageProps) {
           }
 
           // 3. Registrar en base de datos asociando a este álbum
-          try {
-            await supabase.from("photos").insert({
-              id: generateUUID(),
-              album_id: isValidUUID(id) ? id : null,
-              status: "active",
-              latitude: latitude,
-              longitude: longitude,
-            });
-          } catch {
-            // Fallback de mapeo si la DB falla pero el storage no
-            const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-            const localStatusMappings = JSON.parse(localStatusMappingsJson);
-            localStatusMappings[thumbnailName] = "active";
-            localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
-
-            const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
-            const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
-            localAlbumMappings[thumbnailName] = id;
-            localStorage.setItem("family_album_photo_mappings", JSON.stringify(localAlbumMappings));
-          }
+          const { error: dbError } = await supabase.from("photos").insert({
+            id: generateUUID(),
+            album_id: isValidUUID(id) ? id : null,
+            status: "active",
+            latitude: latitude,
+            longitude: longitude,
+          });
+          if (dbError) throw dbError;
 
           uploadSuccess = true;
           // Evaluar IA y GPS en segundo plano

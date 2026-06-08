@@ -150,7 +150,7 @@ export async function analyzePhotoWithGemini(base64Data: string, apiKey: string)
   try {
     const cleanBase64 = base64Data.split(",")[1] || base64Data;
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: {
