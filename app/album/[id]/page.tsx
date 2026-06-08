@@ -30,7 +30,8 @@ export default function AlbumPage({ params }: PageProps) {
   const [uploadStatus, setUploadStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<string | null>(null);
+  const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<{ url: string; name: string } | null>(null);
+  const [rotations, setRotations] = useState<Record<string, number>>({});
   // Estados para Búsqueda Inteligente e IA
   const [people, setPeople] = useState<PersonProfile[]>([]);
   const [taggedPhotos, setTaggedPhotos] = useState<Record<string, string[]>>({});
@@ -193,6 +194,11 @@ export default function AlbumPage({ params }: PageProps) {
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
 
+      const savedRotations = localStorage.getItem("family_album_photo_rotations");
+      if (savedRotations) {
+        setRotations(JSON.parse(savedRotations));
+      }
+
       setPhotos(albumPhotos);
     } catch (err) {
       console.error("Error al cargar fotos del álbum:", err instanceof Error ? err.message : String(err));
@@ -201,11 +207,30 @@ export default function AlbumPage({ params }: PageProps) {
     }
   };
 
+  const handleRotatePhoto = (photoName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const currentRotation = rotations[photoName] || 0;
+    const newRotation = (currentRotation + 90) % 360;
+    const updatedRotations = {
+      ...rotations,
+      [photoName]: newRotation,
+    };
+    setRotations(updatedRotations);
+    localStorage.setItem("family_album_photo_rotations", JSON.stringify(updatedRotations));
+    window.dispatchEvent(new CustomEvent("photo-moved"));
+  };
+
   useEffect(() => {
     fetchAlbumData();
 
     // Escuchar cambios reactivos en caso de que se quiten fotos del álbum o se muevan
-    const handlePhotoMoved = () => fetchAlbumData();
+    const handlePhotoMoved = () => {
+      fetchAlbumData();
+      const savedRotations = localStorage.getItem("family_album_photo_rotations");
+      if (savedRotations) {
+        setRotations(JSON.parse(savedRotations));
+      }
+    };
     window.addEventListener("photo-moved", handlePhotoMoved);
     return () => window.removeEventListener("photo-moved", handlePhotoMoved);
   }, [id]);
@@ -637,7 +662,7 @@ export default function AlbumPage({ params }: PageProps) {
               return (
                 <div
                   key={photo.name}
-                  onClick={() => setActiveLightboxPhoto(originalUrl)}
+                  onClick={() => setActiveLightboxPhoto({ url: originalUrl, name: photo.name })}
                   className={`group relative aspect-square bg-brand-cream/50 rounded-xs overflow-hidden border transition-all duration-300 cursor-zoom-in select-none ${
                     isCurrentCover ? "border-brand-navy ring-2 ring-brand-navy" : "border-brand-navy/10 hover:border-brand-navy"
                   }`}
@@ -647,6 +672,7 @@ export default function AlbumPage({ params }: PageProps) {
                     src={photo.url}
                     alt={photo.name}
                     className="w-full h-full object-cover border border-brand-navy/5 transition-transform duration-500 group-hover:scale-103"
+                    style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                     loading="lazy"
                   />
                   
@@ -678,7 +704,7 @@ export default function AlbumPage({ params }: PageProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setActiveLightboxPhoto(originalUrl);
+                          setActiveLightboxPhoto({ url: originalUrl, name: photo.name });
                         }}
                         className="flex-1 py-1.5 px-2.5 border border-brand-cream/30 hover:bg-brand-cream/10 text-brand-cream text-[10px] sm:text-[11px] font-medium rounded-xs text-center transition-all cursor-pointer"
                       >
@@ -714,21 +740,34 @@ export default function AlbumPage({ params }: PageProps) {
           onClick={() => setActiveLightboxPhoto(null)}
           className="fixed inset-0 bg-brand-navy/90 backdrop-blur-md z-50 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
         >
-          <button
-            onClick={() => setActiveLightboxPhoto(null)}
-            className="absolute top-6 right-6 text-brand-cream/65 hover:text-brand-cream transition-colors p-2 cursor-pointer"
-            title="Cerrar"
-          >
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="absolute top-6 right-6 flex items-center gap-4 z-50">
+            {/* Botón de girar */}
+            <button
+              onClick={(e) => handleRotatePhoto(activeLightboxPhoto.name, e)}
+              className="text-brand-cream/65 hover:text-brand-cream transition-colors p-2 cursor-pointer bg-brand-navy/50 hover:bg-brand-navy/80 rounded-full"
+              title="Girar foto 90°"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setActiveLightboxPhoto(null)}
+              className="text-brand-cream/65 hover:text-brand-cream transition-colors p-2 cursor-pointer bg-brand-navy/50 hover:bg-brand-navy/80 rounded-full"
+              title="Cerrar"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={activeLightboxPhoto}
+            src={activeLightboxPhoto.url}
             alt="Recuerdo Familiar Ampliado"
-            className="max-w-full max-h-[85vh] object-contain rounded-xs border border-brand-cream/20 shadow-2xl animate-in zoom-in-95 duration-200"
+            className="max-w-full max-h-[85vh] object-contain rounded-xs border border-brand-cream/20 shadow-2xl animate-in zoom-in-95 duration-200 transition-transform duration-300"
+            style={{ transform: `rotate(${rotations[activeLightboxPhoto.name] || 0}deg)` }}
             onClick={(e) => e.stopPropagation()}
           />
         </div>

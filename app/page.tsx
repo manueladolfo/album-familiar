@@ -159,6 +159,7 @@ export default function Home() {
 
   const [photoMetadata, setPhotoMetadata] = useState<Record<string, PhotoMetadata>>({});
   const [albums, setAlbums] = useState<AlbumItem[]>([]);
+  const [rotations, setRotations] = useState<Record<string, number>>({});
 
   // Estados para Personas
   const [people, setPeople] = useState<PersonProfile[]>([]);
@@ -223,6 +224,13 @@ export default function Home() {
 
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
+
+      const savedRotations = localStorage.getItem("family_album_photo_rotations");
+      if (savedRotations) {
+        setRotations(JSON.parse(savedRotations));
+      } else {
+        setRotations({});
+      }
     };
 
     loadImportedAndMetadata();
@@ -517,7 +525,8 @@ export default function Home() {
                 <img
                   src={photo.url}
                   alt={photo.title}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-transform duration-300"
+                  style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                 />
                 
                 {/* Degradado premium inferior */}
@@ -737,6 +746,7 @@ export default function Home() {
                         src={photo.url}
                         alt={photo.title}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-102"
+                        style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                         loading="lazy"
                       />
                       <div className="absolute top-3 right-3 bg-brand-cream/90 backdrop-blur-xs text-brand-navy text-[10px] font-semibold px-2 py-0.5 rounded-xs">
@@ -833,7 +843,7 @@ export default function Home() {
                           <div key={photo.name} className={`group relative aspect-square bg-brand-navy/5 rounded-xs overflow-hidden border transition-all duration-200 ${
                             isCurrentAvatar ? "border-brand-navy ring-2 ring-brand-navy" : "border-brand-navy/10 hover:border-brand-navy/30"
                           }`}>
-                            <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
+                            <img src={photo.url} alt={photo.name} className="w-full h-full object-cover transition-transform duration-300" style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }} />
                             
                             {/* Overlay en hover */}
                             <div className="absolute inset-0 bg-brand-navy/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
@@ -890,7 +900,7 @@ export default function Home() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     {suggestedPhotos.map((photo: LocalPhotoItem) => (
                       <div key={photo.name} className="group relative aspect-square bg-brand-navy/5 border border-brand-navy/10 rounded-xs overflow-hidden flex flex-col justify-between">
-                        <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
+                        <img src={photo.url} alt={photo.name} className="w-full h-full object-cover transition-transform duration-300" style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }} />
                         <div className="absolute inset-x-0 bottom-0 bg-brand-navy/80 backdrop-blur-xs p-2 flex flex-col gap-1.5 z-10">
                           <p className="text-[8px] text-brand-cream/80 truncate">Coincidencia de rostro</p>
                           <button
@@ -926,7 +936,7 @@ export default function Home() {
                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin max-w-full">
                       {manualOptions.map((photo: LocalPhotoItem) => (
                         <div key={photo.name} className="w-24 h-24 relative flex-shrink-0 border border-brand-navy/10 rounded-xs overflow-hidden group">
-                          <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
+                          <img src={photo.url} alt={photo.name} className="w-full h-full object-cover transition-transform duration-300" style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }} />
                           <button
                             onClick={() => addPhotoToPerson(photo.name)}
                             className="absolute inset-0 bg-brand-navy/70 text-brand-cream text-[10px] font-semibold opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
@@ -1060,6 +1070,7 @@ export default function Home() {
                               className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-102 ${
                                 isSelected ? "brightness-90" : ""
                               }`}
+                              style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                             />
                             
                             {/* Checkmark visual y orden de selección */}
@@ -1202,7 +1213,8 @@ export default function Home() {
                       <img
                         src={photo.url}
                         alt={photo.title}
-                        className="object-contain w-auto h-auto max-w-full max-h-[70vh] md:max-h-[75vh] landscape:max-h-[62vh] landscape:md:max-h-[72vh]"
+                        className="object-contain w-auto h-auto max-w-full max-h-[70vh] md:max-h-[75vh] landscape:max-h-[62vh] landscape:md:max-h-[72vh] transition-transform duration-300"
+                        style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                         onClick={(e) => e.stopPropagation()}
                       />
                       

@@ -14,6 +14,7 @@ export default function TrashPage() {
   const [deleting, setDeleting] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [rotations, setRotations] = useState<Record<string, number>>({});
 
   // Estados para Búsqueda Inteligente e IA
   const [people, setPeople] = useState<PersonProfile[]>([]);
@@ -119,6 +120,11 @@ export default function TrashPage() {
 
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
+
+      const savedRotations = localStorage.getItem("family_album_photo_rotations");
+      if (savedRotations) {
+        setRotations(JSON.parse(savedRotations));
+      }
 
       setPhotos(trashPhotos);
     } catch (err: any) {
@@ -334,6 +340,7 @@ export default function TrashPage() {
                   src={photo.url}
                   alt={photo.name}
                   className="w-full h-full object-cover grayscale opacity-80 border border-brand-navy/5 transition-transform duration-500 group-hover:scale-103"
+                  style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                   loading="lazy"
                 />
                 
