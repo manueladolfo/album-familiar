@@ -6,6 +6,8 @@ export interface PhotoItem {
   status?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  url_original?: string | null;
+  url_thumbnail?: string | null;
 }
 
 export interface AlbumItem {

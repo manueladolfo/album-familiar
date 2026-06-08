@@ -148,11 +148,13 @@ export default function AlbumPage({ params }: PageProps) {
             let dbMappings: Record<string, string> = {};
             const { data: dbPhotos } = await supabase
               .from("photos")
-              .select("id, album_id")
+              .select("id, album_id, url_original")
               .eq("album_id", id);
+            let dbUrlOriginalMappings: Record<string, string> = {};
             if (dbPhotos) {
               dbPhotos.forEach((p) => {
                 if (p.album_id) dbMappings[p.id] = p.album_id;
+                if (p.url_original) dbUrlOriginalMappings[p.id] = p.url_original;
               });
             }
 
@@ -176,12 +178,15 @@ export default function AlbumPage({ params }: PageProps) {
               const albumId = dbMappings[photoId] || null;
               const status = dbStatusMappings[photoId] || null;
 
+              const urlOriginal = dbUrlOriginalMappings[photoId] || null;
+
               return {
                 name: file.name,
                 url: urlData.publicUrl,
                 created_at: file.created_at,
                 album_id: albumId,
                 status: status,
+                url_original: urlOriginal,
               };
             });
           }
@@ -720,11 +725,16 @@ export default function AlbumPage({ params }: PageProps) {
 
             {/* Renderizado de Fotos */}
             {filteredPhotos.map((photo) => {
-              const nameWithoutWebp = photo.name.replace(/\.webp$/, "");
               const isRemote = photo.url.includes("supabase.co");
-              const originalUrl = isRemote
-                ? supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl
-                : photo.url;
+              let originalUrl: string;
+              if (photo.url_original) {
+                originalUrl = photo.url_original;
+              } else if (isRemote) {
+                const nameWithoutWebp = photo.name.replace(/\.webp$/, "");
+                originalUrl = supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl;
+              } else {
+                originalUrl = photo.url;
+              }
 
               const isCurrentCover = albumCover === photo.url;
 

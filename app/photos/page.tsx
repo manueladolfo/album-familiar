@@ -129,29 +129,57 @@ export default function PhotosPage() {
     if (!isLocalMode) {
       // MODO ONLINE: Solo Supabase
       try {
-        console.log(`Asociando foto ${photoName} al álbum ${albumId} en Supabase`);
+        console.log(`[AlbumAssign] Asociando foto "${photoName}" al álbum "${albumId}" en Supabase`);
         const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
         const cleanPhotoId = nameWithoutExt.split(".")[0];
         const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
 
-        if (isValidUUID(photoId) && (albumId === null || isValidUUID(albumId))) {
-          const { error } = await supabase
-            .from("photos")
-            .update({ album_id: albumId })
-            .eq("id", photoId);
+        console.log(`[AlbumAssign] photoId extraído: "${photoId}", isValidUUID: ${isValidUUID(photoId)}`);
 
-          if (error) throw error;
-          console.log("Actualizado en Supabase correctamente");
-          
-          window.dispatchEvent(
-            new CustomEvent("photo-moved", {
-              detail: { photoId: photoName, albumId },
-            })
-          );
-          await fetchPhotos();
+        if (!isValidUUID(photoId)) {
+          console.error(`[AlbumAssign] No se pudo extraer un UUID válido de "${photoName}"`);
+          setUploadStatus({ type: "error", message: `No se pudo identificar la foto "${photoName}"` });
+          setTimeout(() => setUploadStatus(null), 4000);
+          return;
         }
-      } catch (err) {
-        console.error("Fallo al actualizar en Supabase:", err);
+
+        if (albumId !== null && !isValidUUID(albumId)) {
+          console.error(`[AlbumAssign] albumId "${albumId}" no es un UUID válido`);
+          setUploadStatus({ type: "error", message: `Álbum no válido` });
+          setTimeout(() => setUploadStatus(null), 4000);
+          return;
+        }
+
+        const { data, error, count } = await supabase
+          .from("photos")
+          .update({ album_id: albumId })
+          .eq("id", photoId)
+          .select();
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          console.warn(`[AlbumAssign] La foto "${photoId}" no se encontró en la tabla photos o RLS bloqueó la operación`);
+          setUploadStatus({ type: "error", message: "No se pudo asociar la foto al álbum. Verifica los permisos." });
+          setTimeout(() => setUploadStatus(null), 4000);
+          return;
+        }
+
+        console.log(`[AlbumAssign] Actualizado en Supabase correctamente:`, data);
+        const albumLabel = albumId ? albums.find(a => a.id === albumId)?.name || "álbum" : "";
+        setUploadStatus({ type: "success", message: albumId ? `Foto añadida a "${albumLabel}"` : "Foto quitada del álbum" });
+        setTimeout(() => setUploadStatus(null), 3000);
+
+        window.dispatchEvent(
+          new CustomEvent("photo-moved", {
+            detail: { photoId: photoName, albumId },
+          })
+        );
+        await fetchPhotos();
+      } catch (err: any) {
+        console.error("[AlbumAssign] Fallo al actualizar en Supabase:", err);
+        setUploadStatus({ type: "error", message: `Error al asignar álbum: ${err?.message || String(err)}` });
+        setTimeout(() => setUploadStatus(null), 5000);
       }
     } else {
       // MODO LOCAL: Solo LocalStorage
@@ -214,14 +242,16 @@ export default function PhotosPage() {
             
             const { data: dbPhotos, error: dbPhotosError } = await supabase
               .from("photos")
-              .select("id, album_id, status");
+              .select("id, album_id, status, url_original, url_thumbnail");
 
             if (dbPhotosError) throw dbPhotosError;
 
+            let dbUrlOriginalMappings: Record<string, string> = {};
             if (dbPhotos) {
               dbPhotos.forEach((p) => {
                 if (p.album_id) dbAlbumMappings[p.id] = p.album_id;
                 if (p.status) dbStatusMappings[p.id] = p.status;
+                if (p.url_original) dbUrlOriginalMappings[p.id] = p.url_original;
               });
             }
 
@@ -237,12 +267,15 @@ export default function PhotosPage() {
               const albumId = dbAlbumMappings[photoId] || null;
               const status = dbStatusMappings[photoId] || null;
 
+              const urlOriginal = dbUrlOriginalMappings[photoId] || null;
+
               return {
                 name: file.name,
                 url: urlData.publicUrl,
                 created_at: file.created_at,
                 album_id: albumId,
                 status: status,
+                url_original: urlOriginal,
               };
             });
           }
@@ -780,11 +813,16 @@ export default function PhotosPage() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
             {filteredPhotos.map((photo) => {
-              const nameWithoutWebp = photo.name.replace(/\.webp$/, "");
               const isRemote = photo.url.includes("supabase.co");
-              const originalUrl = isRemote
-                ? supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl
-                : photo.url;
+              let originalUrl: string;
+              if (photo.url_original) {
+                originalUrl = photo.url_original;
+              } else if (isRemote) {
+                const nameWithoutWebp = photo.name.replace(/\.webp$/, "");
+                originalUrl = supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl;
+              } else {
+                originalUrl = photo.url;
+              }
 
               const albumName = getAlbumName(photo.album_id);
 
