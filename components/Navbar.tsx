@@ -45,6 +45,19 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [userEmail, setUserEmail] = useState<string>("Usuario Familiar");
 
+  // Notificaciones
+  interface NotificationItem {
+    id: string;
+    message: string;
+    read: boolean;
+    timestamp: string;
+  }
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState<boolean>(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const [hasUnread, setHasUnread] = useState<boolean>(false);
+
   useEffect(() => {
     const email = localStorage.getItem("family_album_user_email");
     if (email) {
@@ -53,11 +66,65 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
     }
   }, []);
 
+  // Cargar notificaciones e inicializar listener
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const saved = localStorage.getItem("family_album_notifications");
+    let currentNotifs: NotificationItem[] = [];
+    if (saved) {
+      currentNotifs = JSON.parse(saved);
+      setNotifications(currentNotifs);
+      setHasUnread(currentNotifs.some((n: NotificationItem) => !n.read));
+    }
+
+    const handleNewNotification = (e: Event) => {
+      const customEvent = e as CustomEvent<{ message: string }>;
+      const newNotif: NotificationItem = {
+        id: `notif_${Date.now()}`,
+        message: customEvent.detail.message,
+        read: false,
+        timestamp: new Date().toISOString()
+      };
+
+      setNotifications((prev) => {
+        const updated = [newNotif, ...prev];
+        localStorage.setItem("family_album_notifications", JSON.stringify(updated));
+        setHasUnread(true);
+        return updated;
+      });
+    };
+
+    window.addEventListener("new-notification", handleNewNotification);
+    return () => {
+      window.removeEventListener("new-notification", handleNewNotification);
+    };
+  }, []);
+
+  const markAllAsRead = () => {
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }));
+      localStorage.setItem("family_album_notifications", JSON.stringify(updated));
+      setHasUnread(false);
+      return updated;
+    });
+  };
+
+  const clearNotifications = () => {
+    setNotifications([]);
+    localStorage.removeItem("family_album_notifications");
+    setHasUnread(false);
+    setShowNotifDropdown(false);
+  };
+
   // Cerrar el dropdown al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -167,6 +234,62 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
             placeholder="Buscar recuerdos..."
             className="w-64 pl-9 pr-2 py-1.5 border-b border-brand-navy/10 bg-transparent text-xs text-brand-navy placeholder-brand-navy/40 focus:outline-none focus:border-brand-navy transition-all"
           />
+        </div>
+
+        {/* Icono de Campana de Notificaciones */}
+        <div className="relative bg-transparent" ref={notifRef}>
+          <button
+            onClick={() => {
+              setShowNotifDropdown(!showNotifDropdown);
+              if (!showNotifDropdown) {
+                markAllAsRead();
+              }
+            }}
+            className="p-1.5 text-brand-navy/70 hover:text-brand-navy hover:bg-brand-navy/5 rounded-xs transition-all relative cursor-pointer focus:outline-none"
+            title="Notificaciones"
+          >
+            <svg className="w-5.5 h-5.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+            </svg>
+            {hasUnread && (
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse border border-brand-cream" />
+            )}
+          </button>
+
+          {/* Dropdown flotante de notificaciones */}
+          {showNotifDropdown && (
+            <div className="absolute right-0 mt-2.5 w-72 bg-brand-cream border border-brand-navy/15 rounded-xs p-4 shadow-xl z-30 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="flex justify-between items-center border-b border-brand-navy/5 pb-2.5 bg-transparent">
+                <p className="text-[10px] uppercase font-bold tracking-wider text-brand-navy/40">
+                  Notificaciones
+                </p>
+                {notifications.length > 0 && (
+                  <button
+                    onClick={clearNotifications}
+                    className="text-[9px] text-red-600 hover:underline cursor-pointer bg-transparent"
+                  >
+                    Limpiar todo
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1 scrollbar-thin bg-transparent">
+                {notifications.length === 0 ? (
+                  <p className="text-xs text-brand-navy/45 italic py-3 text-center bg-transparent">No hay notificaciones recientes.</p>
+                ) : (
+                  notifications.map((n) => (
+                    <div key={n.id} className="text-left py-1.5 px-2 border-b border-brand-navy/5 bg-transparent flex flex-col gap-0.5 last:border-b-0">
+                      <p className="text-xs text-brand-navy/85 font-medium leading-normal bg-transparent">
+                        {n.message}
+                      </p>
+                      <p className="text-[8px] text-brand-navy/40 bg-transparent">
+                        {new Date(n.timestamp).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Info de Usuario / Avatar clickable */}
