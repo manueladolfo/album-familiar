@@ -366,6 +366,7 @@ export default function AlbumPage({ params }: PageProps) {
 
       let successCount = 0;
       let errorCount = 0;
+      let lastErrorDetails = "";
       const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
       for (let i = 0; i < files.length; i++) {
@@ -449,9 +450,10 @@ export default function AlbumPage({ params }: PageProps) {
 
             successCount++;
             triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude);
-          } catch (err) {
+          } catch (err: any) {
             console.error("Fallo al subir a Supabase en modo online:", err);
             errorCount++;
+            lastErrorDetails = err?.message || String(err);
             break;
           }
         } else {
@@ -502,7 +504,7 @@ export default function AlbumPage({ params }: PageProps) {
       } else {
         setUploadStatus({
           type: "error",
-          message: `Subida completada: ${successCount} fotos subidas con éxito, ${errorCount} fallaron.`,
+          message: `Subida fallida: ${lastErrorDetails || "Fallo en la base de datos de Supabase."}`,
         });
       }
 
