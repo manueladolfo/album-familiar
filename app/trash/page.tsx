@@ -420,7 +420,7 @@ export default function TrashPage() {
                 />
                 
                 {/* Hover overlay con restaurar y borrar */}
-                <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
+                <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
                   <div className="flex justify-end gap-1.5 bg-transparent">
                     {/* Botón Restaurar */}
                     <button

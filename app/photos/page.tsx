@@ -813,7 +813,7 @@ export default function PhotosPage() {
                     />
 
                     {/* Hover overlay con desenfoque de cristal */}
-                    <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4">
+                    <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4">
                       <div className="flex justify-end gap-1.5 bg-transparent">
                         {/* Botón de Favorito */}
                         <button
@@ -869,9 +869,6 @@ export default function PhotosPage() {
 
                       <div className="bg-transparent space-y-2 text-left">
                         <div className="bg-transparent space-y-1">
-                          <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
-                            {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
-                          </p>
                           <p className="text-brand-cream/70 text-[9px]">
                             {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
                           </p>

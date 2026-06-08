@@ -784,7 +784,7 @@ export default function AlbumPage({ params }: PageProps) {
                   
                   {/* Hover overlay con desenfoque de cristal */}
                   {!isSelectMode && (
-                  <div className="absolute inset-0 bg-brand-navy/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
+                  <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
                     <div className="flex justify-end bg-transparent">
                       {/* Botón Quitar del álbum */}
                       <button
@@ -803,9 +803,6 @@ export default function AlbumPage({ params }: PageProps) {
 
                     <div className="bg-transparent space-y-2">
                       <div className="bg-transparent text-left">
-                        <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
-                          {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
-                        </p>
                         <p className="text-brand-cream/70 text-[10px] mt-0.5">
                           {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
                         </p>
