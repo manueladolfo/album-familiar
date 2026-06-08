@@ -441,10 +441,20 @@ export default function AlbumPage({ params }: PageProps) {
               throw thumbError;
             }
 
+            const { data: origUrlData } = supabase.storage
+              .from("family-album")
+              .getPublicUrl(originalPath);
+
+            const { data: thumbUrlData } = supabase.storage
+              .from("family-album")
+              .getPublicUrl(thumbnailPath);
+
             const { error: dbError } = await supabase.from("photos").insert({
               id: photoId,
               album_id: isValidUUID(id) ? id : null,
               status: "active",
+              url_original: origUrlData.publicUrl,
+              url_thumbnail: thumbUrlData.publicUrl,
             });
             if (dbError) throw dbError;
 
