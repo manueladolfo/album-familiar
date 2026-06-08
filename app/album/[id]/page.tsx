@@ -444,8 +444,6 @@ export default function AlbumPage({ params }: PageProps) {
               id: photoId,
               album_id: isValidUUID(id) ? id : null,
               status: "active",
-              latitude: latitude,
-              longitude: longitude,
             });
             if (dbError) throw dbError;
 

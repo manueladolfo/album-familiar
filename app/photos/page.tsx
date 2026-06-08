@@ -432,11 +432,7 @@ export default function PhotosPage() {
         });
 
         const fileExt = file.name.split(".").pop();
-        const cleanFileName = file.name
-          .replace(/\.[^/.]+$/, "")
-          .replace(/[^a-zA-Z0-9]/g, "_")
-          .toLowerCase();
-        const uniqueName = `${Date.now()}_${cleanFileName}`;
+        const photoId = generateUUID();
 
         const compressedBlob = await compressImage(file);
 
@@ -465,12 +461,12 @@ export default function PhotosPage() {
           }
         }
 
-        const thumbnailName = `${uniqueName}.${fileExt}.webp`;
+        const thumbnailName = `${photoId}.webp`;
 
         if (!localActive) {
           // MODO ONLINE: Solo Supabase
           try {
-            const originalPath = `originals/${uniqueName}.${fileExt}`;
+            const originalPath = `originals/${photoId}.${fileExt}`;
             const { error: origError } = await supabase.storage
               .from("family-album")
               .upload(originalPath, file, {
@@ -495,11 +491,9 @@ export default function PhotosPage() {
             }
 
             const { error: dbError } = await supabase.from("photos").insert({
-              id: generateUUID(),
+              id: photoId,
               album_id: null,
               status: "active",
-              latitude: latitude,
-              longitude: longitude,
             });
             if (dbError) throw dbError;
 
@@ -512,7 +506,7 @@ export default function PhotosPage() {
           }
         } else {
           // MODO LOCAL: Solo LocalStorage
-          const localThumbnailName = `${uniqueName}.webp`;
+          const localThumbnailName = `${photoId}.webp`;
           try {
             const newPhoto: PhotoItem = {
               name: localThumbnailName,

@@ -353,7 +353,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           
           let dbPhotos: any[] = [];
           try {
-            const { data } = await supabase.from("photos").select("id, status, latitude, longitude");
+            const { data } = await supabase.from("photos").select("id, status");
             if (data) dbPhotos = data;
           } catch {}
 
@@ -373,8 +373,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
               url: urlData.publicUrl,
               created_at: file.created_at,
               status: status,
-              latitude: dbPhoto ? dbPhoto.latitude : null,
-              longitude: dbPhoto ? dbPhoto.longitude : null,
+              latitude: null,
+              longitude: null,
             };
           }).filter((p) => p.status !== "trash");
         }
