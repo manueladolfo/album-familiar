@@ -127,17 +127,21 @@ export default function PhotosPage() {
     try {
       console.log(`Asociando foto ${photoName} al álbum ${albumId}`);
 
-      if (isValidUUID(photoName) && (albumId === null || isValidUUID(albumId))) {
+      const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
+      const cleanPhotoId = nameWithoutExt.split(".")[0];
+      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+
+      if (isValidUUID(photoId) && (albumId === null || isValidUUID(albumId))) {
         const { error } = await supabase
           .from("photos")
           .update({ album_id: albumId })
-          .eq("id", photoName);
+          .eq("id", photoId);
 
         if (error) throw error;
         console.log("Actualizado en Supabase correctamente");
       }
-    } catch {
-      console.warn("Fallo al actualizar en Supabase (RLS). Guardando en LocalStorage fallback...");
+    } catch (err) {
+      console.warn("Fallo al actualizar en Supabase (RLS). Guardando en LocalStorage fallback...", err);
     } finally {
       const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
       const mappings = JSON.parse(mappingsJson);
@@ -219,8 +223,12 @@ export default function PhotosPage() {
               .from("family-album")
               .getPublicUrl(`thumbnails/${file.name}`);
 
-            const albumId = combinedAlbumMappings[file.name] || null;
-            const status = combinedStatusMappings[file.name] || null;
+            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+            const cleanPhotoId = nameWithoutExt.split(".")[0];
+            const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : file.name;
+
+            const albumId = combinedAlbumMappings[photoId] || null;
+            const status = combinedStatusMappings[photoId] || null;
 
             return {
               name: file.name,
@@ -570,17 +578,22 @@ export default function PhotosPage() {
   // Mover foto a papelera (status = 'trash')
   const moveToTrash = async (photoName: string) => {
     try {
+      const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
+      const cleanPhotoId = nameWithoutExt.split(".")[0];
+      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+
       // 1. Intentar actualizar en base de datos de Supabase solo si el ID es un UUID válido
-      if (isValidUUID(photoName)) {
+      if (isValidUUID(photoId)) {
         const { error } = await supabase
           .from("photos")
           .update({ status: "trash" })
-          .eq("id", photoName);
+          .eq("id", photoId);
 
         if (error) throw error;
+        console.log("Foto movida a la papelera en Supabase correctamente:", photoId);
       }
-    } catch {
-      console.warn("Fallo en actualización de base de datos Supabase (RLS). Usando LocalStorage fallback...");
+    } catch (err) {
+      console.warn("Fallo en actualización de base de datos Supabase (RLS). Usando LocalStorage fallback...", err);
     } finally {
       // 2. Guardar en LocalStorage como fallback
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";

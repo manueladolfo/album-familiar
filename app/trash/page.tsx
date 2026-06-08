@@ -68,7 +68,11 @@ export default function TrashPage() {
               .from("family-album")
               .getPublicUrl(`thumbnails/${file.name}`);
 
-            const status = combinedStatusMappings[file.name] || null;
+            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+            const cleanPhotoId = nameWithoutExt.split(".")[0];
+            const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : file.name;
+
+            const status = combinedStatusMappings[photoId] || null;
 
             return {
               name: file.name,
@@ -141,17 +145,22 @@ export default function TrashPage() {
   // Restaurar una foto
   const restorePhoto = async (photoName: string) => {
     try {
+      const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
+      const cleanPhotoId = nameWithoutExt.split(".")[0];
+      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+
       // 1. Intentar actualizar en base de datos Supabase solo si el ID es UUID válido
-      if (isValidUUID(photoName)) {
+      if (isValidUUID(photoId)) {
         const { error } = await supabase
           .from("photos")
           .update({ status: "active" })
-          .eq("id", photoName);
+          .eq("id", photoId);
 
         if (error) throw error;
+        console.log("Foto restaurada en Supabase correctamente:", photoId);
       }
-    } catch {
-      console.warn("Fallo al restaurar en base de datos. Usando LocalStorage fallback...");
+    } catch (err) {
+      console.warn("Fallo al restaurar en base de datos. Usando LocalStorage fallback...", err);
     } finally {
       // 2. Guardar en LocalStorage como fallback
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
@@ -190,7 +199,11 @@ export default function TrashPage() {
         pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.png`);
         pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.webp`);
 
-        idsToDeleteFromDb.push(photo.name);
+        const nameWithoutExt = photo.name.replace(/\.[^/.]+$/, "");
+        const cleanPhotoId = nameWithoutExt.split(".")[0];
+        const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photo.name;
+
+        idsToDeleteFromDb.push(photoId);
       });
 
       // 1. Borrar en Supabase Storage
@@ -281,15 +294,19 @@ export default function TrashPage() {
       }
 
       // 2. Borrar registro de Supabase Database (si es UUID válido)
-      if (isValidUUID(photoName)) {
+      const cleanPhotoId = nameWithoutWebp.split(".")[0];
+      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+
+      if (isValidUUID(photoId)) {
         try {
           const { error: dbError } = await supabase
             .from("photos")
             .delete()
-            .eq("id", photoName);
+            .eq("id", photoId);
           if (dbError) throw dbError;
-        } catch {
-          console.warn("Error al borrar de base de datos de Supabase (RLS). Continuando localmente...");
+          console.log("Registro de base de datos borrado en Supabase:", photoId);
+        } catch (dbErr) {
+          console.warn("Error al borrar de base de datos de Supabase (RLS). Continuando localmente...", dbErr);
         }
       }
 

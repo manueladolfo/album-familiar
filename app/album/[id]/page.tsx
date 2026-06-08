@@ -181,8 +181,12 @@ export default function AlbumPage({ params }: PageProps) {
               .from("family-album")
               .getPublicUrl(`thumbnails/${file.name}`);
 
-            const albumId = combinedMappings[file.name] || null;
-            const status = combinedStatusMappings[file.name] || null;
+            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+            const cleanPhotoId = nameWithoutExt.split(".")[0];
+            const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : file.name;
+
+            const albumId = combinedMappings[photoId] || null;
+            const status = combinedStatusMappings[photoId] || null;
 
             return {
               name: file.name,
@@ -392,11 +396,7 @@ export default function AlbumPage({ params }: PageProps) {
         });
 
         const fileExt = file.name.split(".").pop();
-        const cleanFileName = file.name
-          .replace(/\.[^/.]+$/, "")
-          .replace(/[^a-zA-Z0-9]/g, "_")
-          .toLowerCase();
-        const uniqueName = `${Date.now()}_${cleanFileName}`;
+        const photoId = generateUUID();
 
         const compressedBlob = await compressImage(file);
 
@@ -426,11 +426,11 @@ export default function AlbumPage({ params }: PageProps) {
         }
 
         let uploadSuccess = false;
-        const thumbnailName = `${uniqueName}.${fileExt}.webp`;
+        const thumbnailName = `${photoId}.webp`;
 
         // 1. Intentar subir imagen original a Supabase
         try {
-          const originalPath = `originals/${uniqueName}.${fileExt}`;
+          const originalPath = `originals/${photoId}.${fileExt}`;
           const { error: origError } = await supabase.storage
             .from("family-album")
             .upload(originalPath, file, {
@@ -457,7 +457,7 @@ export default function AlbumPage({ params }: PageProps) {
 
           // 3. Registrar en base de datos asociando a este álbum
           const { error: dbError } = await supabase.from("photos").insert({
-            id: generateUUID(),
+            id: photoId,
             album_id: isValidUUID(id) ? id : null,
             status: "active",
             latitude: latitude,
@@ -474,7 +474,7 @@ export default function AlbumPage({ params }: PageProps) {
 
         // Si no se subió a Supabase, guardamos localmente como fallback
         if (!uploadSuccess) {
-          const localThumbnailName = `${uniqueName}.webp`;
+          const localThumbnailName = `${photoId}.webp`;
           try {
             const newPhoto: PhotoItem = {
               name: localThumbnailName,

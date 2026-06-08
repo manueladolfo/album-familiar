@@ -267,8 +267,12 @@ export default function Home() {
                 .from("family-album")
                 .getPublicUrl(`thumbnails/${file.name}`);
 
-              const albumId = combinedAlbumMappings[file.name] || null;
-              const status = combinedStatusMappings[file.name] || null;
+              const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+              const cleanPhotoId = nameWithoutExt.split(".")[0];
+              const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : file.name;
+
+              const albumId = combinedAlbumMappings[photoId] || null;
+              const status = combinedStatusMappings[photoId] || null;
 
               return {
                 name: file.name,
@@ -542,15 +546,20 @@ export default function Home() {
   // Mover foto a papelera desde Inicio
   const moveToTrashFromHome = async (photoName: string) => {
     try {
-      if (isValidUUID(photoName)) {
+      const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
+      const cleanPhotoId = nameWithoutExt.split(".")[0];
+      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+
+      if (isValidUUID(photoId)) {
         const { error } = await supabase
           .from("photos")
           .update({ status: "trash" })
-          .eq("id", photoName);
+          .eq("id", photoId);
         if (error) throw error;
+        console.log("Foto movida a la papelera en Supabase desde inicio correctamente:", photoId);
       }
-    } catch {
-      console.warn("Fallo al mover a la papelera en Supabase (RLS). Guardando localmente...");
+    } catch (err) {
+      console.warn("Fallo al mover a la papelera en Supabase (RLS). Guardando localmente...", err);
     } finally {
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
       const localStatusMappings = JSON.parse(localStatusMappingsJson);
