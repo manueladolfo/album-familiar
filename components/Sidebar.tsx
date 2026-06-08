@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { supabase, isUserAdmin } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 
 import { analyzePhotoWithGemini, getReverseGeocoding } from "@/lib/search";
@@ -38,8 +38,19 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
   const router = useRouter();
   const searchParams = useSearchParams();
   const [albums, setAlbums] = useState<AlbumItem[]>([]);
-  const [dragOverAlbumId, setDragOverAlbumId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [hearts, setHearts] = useState<FloatingHeart[]>([]);
+  const [dragOverAlbumId, setDragOverAlbumId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkAdmin = () => {
+      const email = localStorage.getItem("family_album_user_email");
+      setIsAdmin(isUserAdmin(email));
+    };
+    checkAdmin();
+    window.addEventListener("photo-moved", checkAdmin);
+    return () => window.removeEventListener("photo-moved", checkAdmin);
+  }, []);
 
   const triggerHearts = () => {
     // Generar una ráfaga de 6 corazones con posiciones, retrasos y rotaciones aleatorias
@@ -639,19 +650,21 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
             <h4 className="text-xs font-semibold text-brand-navy/50 uppercase tracking-wider bg-transparent">
               Álbumes
             </h4>
-            <button
-              onClick={() => setIsCreating(true)}
-              className="p-1 border border-brand-navy/15 hover:border-brand-navy/40 text-brand-navy/60 hover:text-brand-navy rounded-xs transition-all cursor-pointer bg-transparent"
-              title="Crear nuevo álbum"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setIsCreating(true)}
+                className="p-1 border border-brand-navy/15 hover:border-brand-navy/40 text-brand-navy/60 hover:text-brand-navy rounded-xs transition-all cursor-pointer bg-transparent"
+                title="Crear nuevo álbum"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </button>
+            )}
           </div>
 
           {/* Formulario de creación inline */}
-          {isCreating && (
+          {isAdmin && isCreating && (
             <form onSubmit={handleCreateAlbum} className="flex gap-2 p-2 bg-brand-cream/50 border border-brand-navy/15 rounded-xs mb-3">
               <input
                 ref={createInputRef}
@@ -698,9 +711,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
               return (
                 <div
                   key={album.id}
-                  onDragOver={(e) => handleDragOver(e, album.id)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, album.id)}
+                  onDragOver={(e) => isAdmin ? handleDragOver(e, album.id) : undefined}
+                  onDragLeave={isAdmin ? handleDragLeave : undefined}
+                  onDrop={(e) => isAdmin ? handleDrop(e, album.id) : undefined}
                   className={`group relative transition-all rounded-xs overflow-hidden ${
                     isDraggingOver
                       ? "bg-brand-sage/20 scale-[1.01] border border-dashed border-brand-navy/30"
@@ -761,35 +774,37 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                       </Link>
 
                       {/* Botones de acción en hover */}
-                      <div className="flex md:hidden md:group-hover:flex items-center gap-1 bg-transparent transition-opacity">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            setEditingAlbumId(album.id);
-                            setEditingAlbumName(album.name);
-                          }}
-                          className="p-1 text-brand-navy/55 hover:text-brand-navy hover:bg-brand-navy/5 rounded-xs transition-colors cursor-pointer"
-                          title="Renombrar álbum"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            setShowConfirmDelete(album.id);
-                          }}
-                          className="p-1 text-brand-navy/55 hover:text-red-600 hover:bg-red-50/20 rounded-xs transition-colors cursor-pointer"
-                          title="Borrar álbum"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
+                      {isAdmin && (
+                        <div className="flex md:hidden md:group-hover:flex items-center gap-1 bg-transparent transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              setEditingAlbumId(album.id);
+                              setEditingAlbumName(album.name);
+                            }}
+                            className="p-1 text-brand-navy/55 hover:text-brand-navy hover:bg-brand-navy/5 rounded-xs transition-colors cursor-pointer"
+                            title="Renombrar álbum"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              setShowConfirmDelete(album.id);
+                            }}
+                            className="p-1 text-brand-navy/55 hover:text-red-600 hover:bg-red-50/20 rounded-xs transition-colors cursor-pointer"
+                            title="Borrar álbum"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
