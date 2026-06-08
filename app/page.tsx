@@ -431,6 +431,36 @@ export default function Home() {
     setFeedback({ type: "success", text: "Foto de portada del perfil actualizada." });
   };
 
+  // Eliminar un perfil de persona o grupo familiar
+  const handleDeletePerson = (personId: string, name: string, isGroup: boolean) => {
+    const confirmMsg = isGroup 
+      ? `¿Estás seguro de que deseas eliminar el grupo "${name}"? Esta acción no se puede deshacer.`
+      : `¿Estás seguro de que deseas eliminar el perfil de "${name}"? Esta acción no se puede deshacer.`;
+      
+    if (!window.confirm(confirmMsg)) return;
+
+    // 1. Filtrar la persona de la lista
+    const updatedPeople = people.filter(p => p.id !== personId);
+    setPeople(updatedPeople);
+    localStorage.setItem("family_album_people", JSON.stringify(updatedPeople));
+
+    // 2. Limpiar el mapeo de fotos etiquetadas correspondientes
+    const updatedTagged = { ...taggedPhotos };
+    delete updatedTagged[personId];
+    setTaggedPhotos(updatedTagged);
+    localStorage.setItem("family_album_person_tags", JSON.stringify(updatedTagged));
+
+    // 3. Si estaba seleccionado, cerrar modal
+    if (selectedPerson && selectedPerson.id === personId) {
+      setSelectedPerson(null);
+    }
+
+    setFeedback({
+      type: "success",
+      text: isGroup ? `Grupo "${name}" eliminado correctamente.` : `Perfil de "${name}" eliminado correctamente.`
+    });
+  };
+
   // Sembrar todos los ejemplos locales
   const seedAllExamples = () => {
     try {
@@ -756,6 +786,20 @@ export default function Home() {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/95 via-brand-navy/30 to-transparent flex flex-col justify-end p-4" />
                   
+                  {/* Botón de eliminar en hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeletePerson(group.id, group.name, true);
+                    }}
+                    className="absolute top-2.5 right-2.5 p-1.5 bg-red-600/90 text-brand-cream rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 shadow-md z-20 cursor-pointer"
+                    title="Eliminar grupo"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                  
                   <div className="absolute bottom-3 left-3 right-3 text-brand-cream flex justify-between items-end bg-transparent">
                     <div>
                       <h4 className="text-xs md:text-sm font-semibold tracking-wide uppercase">{group.name}</h4>
@@ -807,7 +851,7 @@ export default function Home() {
                 <div
                   key={person.id}
                   onClick={() => setSelectedPerson(person)}
-                  className="group flex flex-col items-center gap-3 p-4 bg-brand-cream border border-brand-navy/10 hover:border-brand-navy/35 hover:shadow-md transition-all rounded-xs cursor-pointer text-center"
+                  className="group flex flex-col items-center gap-3 p-4 bg-brand-cream border border-brand-navy/10 hover:border-brand-navy/35 hover:shadow-md transition-all rounded-xs cursor-pointer text-center relative"
                 >
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border border-brand-navy/10 shadow-sm relative">
                     <img
@@ -817,6 +861,20 @@ export default function Home() {
                     />
                     <div className="absolute inset-0 bg-brand-navy/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
+                  
+                  {/* Botón de eliminar en hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeletePerson(person.id, person.name, false);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-red-600/90 text-brand-cream rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 shadow-md z-20 cursor-pointer"
+                    title="Eliminar perfil"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                   <div className="space-y-0.5 bg-transparent">
                     <h4 className="text-xs font-semibold text-brand-navy/90 tracking-wide uppercase truncate max-w-[120px]">
                       {person.name}
@@ -1248,7 +1306,13 @@ export default function Home() {
             </div>
 
             {/* Footer del Modal */}
-            <div className="pt-4 border-t border-brand-navy/10 flex justify-end bg-transparent">
+            <div className="pt-4 border-t border-brand-navy/10 flex justify-between items-center bg-transparent">
+              <button
+                onClick={() => handleDeletePerson(selectedPerson.id, selectedPerson.name, selectedPerson.isGroup)}
+                className="py-1.5 px-3 bg-red-600 hover:bg-red-700 text-brand-cream text-xs font-semibold rounded-xs cursor-pointer transition-colors"
+              >
+                Eliminar {selectedPerson.isGroup ? "Grupo" : "Perfil"}
+              </button>
               <button
                 onClick={() => setSelectedPerson(null)}
                 className="py-1.5 px-4 bg-brand-navy text-brand-cream text-xs font-semibold rounded-xs cursor-pointer hover:bg-brand-navy/90"
