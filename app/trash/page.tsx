@@ -4,13 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
-
-interface PhotoItem {
-  name: string;
-  url: string;
-  created_at: string | null;
-  status: string | null;
-}
+import { filterPhotos, PersonProfile, PhotoMetadata, PhotoItem } from "@/lib/search";
 
 export default function TrashPage() {
   const searchParams = useSearchParams();
@@ -20,6 +14,11 @@ export default function TrashPage() {
   const [deleting, setDeleting] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Estados para Búsqueda Inteligente e IA
+  const [people, setPeople] = useState<PersonProfile[]>([]);
+  const [taggedPhotos, setTaggedPhotos] = useState<Record<string, string[]>>({});
+  const [photoMetadata, setPhotoMetadata] = useState<Record<string, PhotoMetadata>>({});
 
   // Cargar fotos eliminadas (status === 'trash')
   const fetchTrashPhotos = async () => {
@@ -110,6 +109,16 @@ export default function TrashPage() {
           const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
           return dateB - dateA;
         });
+
+      // Cargar personas, tags de personas y metadata de IA
+      const peopleJson = localStorage.getItem("family_album_people") || "[]";
+      setPeople(JSON.parse(peopleJson));
+
+      const taggedJson = localStorage.getItem("family_album_person_tags") || "{}";
+      setTaggedPhotos(JSON.parse(taggedJson));
+
+      const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
+      setPhotoMetadata(JSON.parse(metadataJson));
 
       setPhotos(trashPhotos);
     } catch (err: any) {
@@ -241,13 +250,14 @@ export default function TrashPage() {
     }
   };
 
-  const filteredPhotos = photos.filter((photo) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    const photoName = photo.name.toLowerCase();
-    const photoYear = photo.created_at ? new Date(photo.created_at).getFullYear().toString() : "";
-    return photoName.includes(query) || photoYear.includes(query);
-  });
+  const filteredPhotos = filterPhotos(
+    photos,
+    searchQuery,
+    [],
+    people,
+    taggedPhotos,
+    photoMetadata
+  );
 
   return (
     <div className="flex-1 p-4 md:p-8 space-y-6 md:space-y-8 bg-brand-cream overflow-y-auto">
@@ -349,6 +359,20 @@ export default function TrashPage() {
                     <p className="text-brand-cream/70 text-[10px] mt-0.5">
                       {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
                     </p>
+                    {photoMetadata[photo.name] && (
+                      <div className="bg-transparent space-y-0.5 pt-1">
+                        {photoMetadata[photo.name].location && (
+                          <p className="text-[9px] text-brand-cream/80 truncate flex items-center gap-1">
+                            📍 {photoMetadata[photo.name].location}
+                          </p>
+                        )}
+                        {photoMetadata[photo.name].tags && photoMetadata[photo.name].tags.length > 0 && (
+                          <p className="text-[8px] text-brand-cream/60 italic truncate">
+                            🏷️ {photoMetadata[photo.name].tags.slice(0, 4).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

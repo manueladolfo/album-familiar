@@ -5,16 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 import exifr from "exifr";
+import { filterPhotos, analyzePhotoWithGemini, getReverseGeocoding, PersonProfile, PhotoMetadata, PhotoItem } from "@/lib/search";
 
-interface PhotoItem {
-  name: string;
-  url: string;
-  created_at: string | null;
-  album_id?: string | null;
-  status?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-}
 
 interface AlbumItem {
   id: string;
@@ -33,6 +25,11 @@ export default function PhotosPage() {
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<string | null>(null);
+
+  // Estados para Búsqueda Inteligente e IA
+  const [people, setPeople] = useState<PersonProfile[]>([]);
+  const [taggedPhotos, setTaggedPhotos] = useState<Record<string, string[]>>({});
+  const [photoMetadata, setPhotoMetadata] = useState<Record<string, PhotoMetadata>>({});
 
   // Estado de Favoritos
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -221,6 +218,16 @@ export default function PhotosPage() {
           return dateB - dateA;
         });
 
+      // Cargar personas, tags de personas y metadata de IA
+      const peopleJson = localStorage.getItem("family_album_people") || "[]";
+      setPeople(JSON.parse(peopleJson));
+
+      const taggedJson = localStorage.getItem("family_album_person_tags") || "{}";
+      setTaggedPhotos(JSON.parse(taggedJson));
+
+      const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
+      setPhotoMetadata(JSON.parse(metadataJson));
+
       setPhotos(activePhotos);
     } catch (error) {
       console.error("Error al cargar fotos combinadas:", error instanceof Error ? error.message : String(error));
@@ -297,6 +304,39 @@ export default function PhotosPage() {
     });
   };
 
+  // Analizar foto en segundo plano con Gemini e IA y geolocalizar con Nominatim
+  const triggerAIEvaluation = async (photoName: string, base64Image: string, lat: number | null, lon: number | null) => {
+    const apiKey = localStorage.getItem("family_album_gemini_api_key");
+    if (!apiKey && !lat && !lon) return;
+
+    try {
+      let tags: string[] = [];
+      if (apiKey && base64Image) {
+        tags = await analyzePhotoWithGemini(base64Image, apiKey);
+      }
+
+      let locationText = "";
+      if (lat !== null && lon !== null) {
+        locationText = await getReverseGeocoding(lat, lon);
+      }
+
+      const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
+      const metadata = JSON.parse(metadataJson);
+
+      metadata[photoName] = {
+        tags: tags.length > 0 ? tags : ["recuerdo", "familiar"],
+        location: locationText || undefined,
+      };
+
+      localStorage.setItem("family_album_photo_metadata", JSON.stringify(metadata));
+      
+      // Notificar a los listados que cambie la UI
+      window.dispatchEvent(new CustomEvent("photo-moved"));
+    } catch (err) {
+      console.error("Error en evaluación automática de IA en subida:", err);
+    }
+  };
+
   // Manejar subida de archivos
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -323,6 +363,14 @@ export default function PhotosPage() {
 
       const compressedBlob = await compressImage(file);
 
+      // Convertir a Base64 de antemano para Gemini
+      const base64Image: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Error al convertir imagen a base64"));
+        reader.readAsDataURL(compressedBlob);
+      });
+
       // Extraer metadatos GPS de la imagen original usando exifr
       let latitude: number | null = null;
       let longitude: number | null = null;
@@ -338,6 +386,7 @@ export default function PhotosPage() {
       }
 
       let uploadSuccess = false;
+      const thumbnailName = `${uniqueName}.${fileExt}.webp`;
 
       // 1. Intentar subir imagen original a Supabase
       try {
@@ -352,7 +401,6 @@ export default function PhotosPage() {
         if (origError) throw origError;
 
         // 2. Intentar subir miniatura comprimida (WebP)
-        const thumbnailName = `${uniqueName}.${fileExt}.webp`;
         const thumbnailPath = `thumbnails/${thumbnailName}`;
         const { error: thumbError } = await supabase.storage
           .from("family-album")
@@ -389,6 +437,9 @@ export default function PhotosPage() {
           message: "¡Foto subida y optimizada correctamente a la nube (Supabase)!",
         });
         uploadSuccess = true;
+        
+        // Evaluar IA y GPS en segundo plano
+        triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude);
         await fetchPhotos();
       } catch (err) {
         console.warn("Fallo al subir a Supabase. Activando almacenamiento local de respaldo...", err instanceof Error ? err.message : String(err));
@@ -396,50 +447,47 @@ export default function PhotosPage() {
 
       // Si no se subió a Supabase, guardamos localmente como fallback
       if (!uploadSuccess) {
-        const thumbnailName = `${uniqueName}.webp`;
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          try {
-            const base64data = reader.result as string;
-            
-            const newPhoto: PhotoItem = {
-              name: thumbnailName,
-              url: base64data,
-              created_at: new Date().toISOString(),
-              album_id: null,
-              status: "active",
-              latitude: latitude,
-              longitude: longitude
-            };
+        const localThumbnailName = `${uniqueName}.webp`;
+        try {
+          const newPhoto: PhotoItem = {
+            name: localThumbnailName,
+            url: base64Image,
+            created_at: new Date().toISOString(),
+            album_id: null,
+            status: "active",
+            latitude: latitude,
+            longitude: longitude,
+          };
 
-            // Guardar en family_album_local_photos
-            const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-            const localPhotos = JSON.parse(localPhotosJson);
-            localPhotos.unshift(newPhoto);
-            localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
+          // Guardar en family_album_local_photos
+          const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+          const localPhotos = JSON.parse(localPhotosJson);
+          localPhotos.unshift(newPhoto);
+          localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
 
-            // Guardar estado
-            const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-            const localStatusMappings = JSON.parse(localStatusMappingsJson);
-            localStatusMappings[thumbnailName] = "active";
-            localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
+          // Guardar estado
+          const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+          const localStatusMappings = JSON.parse(localStatusMappingsJson);
+          localStatusMappings[localThumbnailName] = "active";
+          localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
 
-            setUploadStatus({
-              type: "success",
-              message: "¡Foto optimizada y guardada localmente (almacenamiento del navegador)!",
-            });
-          } catch (fallbackErr) {
-            console.error("Fallo al guardar en LocalStorage:", fallbackErr);
-            setUploadStatus({
-              type: "error",
-              message: `Fallo al guardar la foto localmente: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`,
-            });
-          } finally {
-            await fetchPhotos();
-            setUploading(false);
-          }
-        };
-        reader.readAsDataURL(compressedBlob);
+          setUploadStatus({
+            type: "success",
+            message: "¡Foto optimizada y guardada localmente (almacenamiento del navegador)!",
+          });
+          
+          // Evaluar IA y GPS en segundo plano
+          triggerAIEvaluation(localThumbnailName, base64Image, latitude, longitude);
+        } catch (fallbackErr) {
+          console.error("Fallo al guardar en LocalStorage:", fallbackErr);
+          setUploadStatus({
+            type: "error",
+            message: `Fallo al guardar la foto localmente: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`,
+          });
+        } finally {
+          await fetchPhotos();
+          setUploading(false);
+        }
       } else {
         setUploading(false);
       }
@@ -509,18 +557,11 @@ export default function PhotosPage() {
     return album ? album.name : null;
   };
 
-  let filteredPhotos = photos.filter((photo) => {
-    if (filterParam === "favorites" && !favorites.includes(photo.name)) {
-      return false;
-    }
+  let filteredPhotos = filterPhotos(photos, searchQuery, albums, people, taggedPhotos, photoMetadata);
 
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    const photoName = photo.name.toLowerCase();
-    const photoYear = photo.created_at ? new Date(photo.created_at).getFullYear().toString() : "";
-    const albumName = getAlbumName(photo.album_id)?.toLowerCase() || "";
-    return photoName.includes(query) || photoYear.includes(query) || albumName.includes(query);
-  });
+  if (filterParam === "favorites") {
+    filteredPhotos = filteredPhotos.filter((photo) => favorites.includes(photo.name));
+  }
 
   if (filterParam === "recent") {
     filteredPhotos = filteredPhotos.slice(0, 12);
@@ -668,13 +709,27 @@ export default function PhotosPage() {
                       </div>
 
                       <div className="bg-transparent space-y-2 text-left">
-                        <div className="bg-transparent">
+                        <div className="bg-transparent space-y-1">
                           <p className="text-brand-cream text-xs font-semibold tracking-wider uppercase truncate">
                             {photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "")}
                           </p>
-                          <p className="text-brand-cream/70 text-[10px] mt-0.5">
+                          <p className="text-brand-cream/70 text-[9px]">
                             {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
                           </p>
+                          {photoMetadata[photo.name] && (
+                            <div className="bg-transparent space-y-0.5 pt-0.5">
+                              {photoMetadata[photo.name].location && (
+                                <p className="text-[9px] text-brand-cream/80 truncate flex items-center gap-1">
+                                  📍 {photoMetadata[photo.name].location}
+                                </p>
+                              )}
+                              {photoMetadata[photo.name].tags && photoMetadata[photo.name].tags.length > 0 && (
+                                <p className="text-[8px] text-brand-cream/60 italic truncate">
+                                  🏷️ {photoMetadata[photo.name].tags.slice(0, 4).join(", ")}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="flex gap-2 bg-transparent">
                           <button

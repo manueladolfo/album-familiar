@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
+import { filterPhotos, PhotoMetadata, PhotoItem } from "@/lib/search";
 
 interface SamplePhoto {
   id: string;
@@ -11,6 +12,11 @@ interface SamplePhoto {
   url: string;
   albumId: string;
   createdAt: string;
+}
+
+interface AlbumItem {
+  id: string;
+  name: string;
 }
 
 interface PersonProfile {
@@ -151,6 +157,9 @@ export default function Home() {
   const [activeCollectionIndex, setActiveCollectionIndex] = useState<number>(0);
   const [isFullscreenCarousel, setIsFullscreenCarousel] = useState<boolean>(false);
 
+  const [photoMetadata, setPhotoMetadata] = useState<Record<string, PhotoMetadata>>({});
+  const [albums, setAlbums] = useState<AlbumItem[]>([]);
+
   // Estados para Personas
   const [people, setPeople] = useState<PersonProfile[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<PersonProfile | null>(null);
@@ -206,17 +215,32 @@ export default function Home() {
       setTaggedPhotos(initialTags);
     }
 
-    // 4. Cargar fotos importadas
-    const loadImported = () => {
+    // 4. Cargar fotos importadas y metadatos de IA
+    const loadImportedAndMetadata = () => {
       const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
       const localPhotos = JSON.parse(localPhotosJson);
       setImportedPhotos(localPhotos.map((p: LocalPhotoItem) => p.name));
+
+      const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
+      setPhotoMetadata(JSON.parse(metadataJson));
     };
 
-    loadImported();
-    window.addEventListener("photo-moved", loadImported);
+    loadImportedAndMetadata();
+
+    // 5. Cargar álbumes locales
+    const loadAlbums = () => {
+      const localAlbums = localStorage.getItem("family_album_local_albums");
+      if (localAlbums) {
+        setAlbums(JSON.parse(localAlbums));
+      }
+    };
+    loadAlbums();
+
+    window.addEventListener("photo-moved", loadImportedAndMetadata);
+    window.addEventListener("refresh-albums", loadAlbums);
     return () => {
-      window.removeEventListener("photo-moved", loadImported);
+      window.removeEventListener("photo-moved", loadImportedAndMetadata);
+      window.removeEventListener("refresh-albums", loadAlbums);
     };
   }, []);
 
@@ -665,15 +689,26 @@ export default function Home() {
         </div>
 
         {(() => {
-          const filteredPhotos = SAMPLE_PHOTOS.filter((photo) => {
-            if (!searchQuery) return true;
-            const query = searchQuery.toLowerCase();
-            const matchTitle = photo.title.toLowerCase().includes(query);
-            const matchYear = photo.createdAt.split("-")[0].includes(query);
-            const matchAlbum = photo.albumId.split("-").slice(2).join(" ").toLowerCase().includes(query);
-            const matchName = photo.name.toLowerCase().includes(query);
-            return matchTitle || matchYear || matchAlbum || matchName;
-          });
+          const photoItems: PhotoItem[] = SAMPLE_PHOTOS.map((p) => ({
+            name: p.name,
+            url: p.url,
+            created_at: p.createdAt,
+            album_id: p.albumId,
+            status: "active"
+          }));
+
+          const filteredPhotoItems = filterPhotos(
+            photoItems,
+            searchQuery,
+            albums,
+            people,
+            taggedPhotos,
+            photoMetadata
+          );
+
+          const filteredPhotos = SAMPLE_PHOTOS.filter((photo) =>
+            filteredPhotoItems.some((f) => f.name === photo.name)
+          );
 
           if (filteredPhotos.length === 0) {
             return (

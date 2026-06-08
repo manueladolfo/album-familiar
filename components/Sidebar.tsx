@@ -6,10 +6,22 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 
+import { analyzePhotoWithGemini, getReverseGeocoding } from "@/lib/search";
+
 interface AlbumItem {
   id: string;
   name: string;
   created_at?: string | null;
+}
+
+interface PhotoItem {
+  name: string;
+  url: string;
+  created_at: string | null;
+  album_id?: string | null;
+  status?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 interface FloatingHeart {
@@ -56,6 +68,18 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
   const [showConfirmDelete, setShowConfirmDelete] = useState<string | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Estados para Ajustes de IA
+  const [isAISettingsOpen, setIsAISettingsOpen] = useState<boolean>(false);
+  const [apiKeyInput, setApiKeyInput] = useState<string>("");
+  const [isAnalyzingRetroactive, setIsAnalyzingRetroactive] = useState<boolean>(false);
+  const [retroactiveProgress, setRetroactiveProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [retroactiveMessage, setRetroactiveMessage] = useState<string>("");
+
+  useEffect(() => {
+    const savedKey = localStorage.getItem("family_album_gemini_api_key") || "";
+    setApiKeyInput(savedKey);
+  }, [isAISettingsOpen]);
   
   // Estado para la sección de Explorar
   const [isExploreOpen, setIsExploreOpen] = useState<boolean>(true);
@@ -277,6 +301,141 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         localStorage.setItem("family_album_local_albums", JSON.stringify(defaultAlbums));
         setAlbums(defaultAlbums);
       }
+    }
+  };
+
+  // Ejecutar análisis retroactivo de fotos existentes con Gemini e IA
+  const handleRetroactiveAnalysis = async () => {
+    const key = localStorage.getItem("family_album_gemini_api_key");
+    if (!key) {
+      setRetroactiveMessage("Error: Configura tu API Key de Gemini primero.");
+      return;
+    }
+
+    try {
+      setIsAnalyzingRetroactive(true);
+      setRetroactiveMessage("Cargando lista de recuerdos...");
+
+      // 1. Obtener fotos locales
+      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+      const localPhotos: PhotoItem[] = JSON.parse(localPhotosJson);
+      const activeLocalPhotos = localPhotos.filter((p) => p.status !== "trash");
+
+      // 2. Obtener fotos remotas de Supabase Storage
+      let remotePhotos: PhotoItem[] = [];
+      try {
+        const { data: storageData } = await supabase.storage
+          .from("family-album")
+          .list("thumbnails", { limit: 100 });
+
+        if (storageData) {
+          const validFiles = storageData.filter((file) => file.name !== ".emptyFolderPlaceholder");
+          
+          let dbPhotos: any[] = [];
+          try {
+            const { data } = await supabase.from("photos").select("id, status, latitude, longitude");
+            if (data) dbPhotos = data;
+          } catch {}
+
+          const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+          const localStatusMappings = JSON.parse(localStatusMappingsJson);
+
+          remotePhotos = validFiles.map((file) => {
+            const { data: urlData } = supabase.storage
+              .from("family-album")
+              .getPublicUrl(`thumbnails/${file.name}`);
+
+            const dbPhoto = dbPhotos.find((p) => p.id === file.name);
+            const status = localStatusMappings[file.name] || (dbPhoto ? dbPhoto.status : null);
+
+            return {
+              name: file.name,
+              url: urlData.publicUrl,
+              created_at: file.created_at,
+              status: status,
+              latitude: dbPhoto ? dbPhoto.latitude : null,
+              longitude: dbPhoto ? dbPhoto.longitude : null,
+            };
+          }).filter((p) => p.status !== "trash");
+        }
+      } catch (err) {
+        console.warn("Fallo al cargar fotos remotas en análisis retroactivo:", err);
+      }
+
+      // Combinar fotos (evitando duplicados por nombre)
+      const allPhotos = [...remotePhotos];
+      activeLocalPhotos.forEach((lp) => {
+        if (!allPhotos.some((p) => p.name === lp.name)) {
+          allPhotos.push(lp);
+        }
+      });
+
+      // Leer metadatos actuales
+      const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
+      const metadata = JSON.parse(metadataJson);
+
+      // Filtrar fotos que no tienen etiquetas registradas
+      const pendingPhotos = allPhotos.filter((p) => !metadata[p.name]);
+
+      if (pendingPhotos.length === 0) {
+        setRetroactiveMessage("¡Todos tus recuerdos ya han sido analizados y etiquetados!");
+        setIsAnalyzingRetroactive(false);
+        return;
+      }
+
+      setRetroactiveProgress({ current: 0, total: pendingPhotos.length });
+      setRetroactiveMessage(`Iniciando análisis de ${pendingPhotos.length} recuerdos...`);
+
+      for (let i = 0; i < pendingPhotos.length; i++) {
+        const photo = pendingPhotos[i];
+        setRetroactiveProgress({ current: i + 1, total: pendingPhotos.length });
+        setRetroactiveMessage(`Analizando: ${photo.name.split("_").slice(1).join("_") || photo.name}`);
+
+        let base64Data = "";
+        if (photo.url.startsWith("data:image/")) {
+          base64Data = photo.url;
+        } else {
+          try {
+            const response = await fetch(photo.url);
+            const blob = await response.blob();
+            base64Data = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onerror = () => reject(new Error("Error al convertir a base64"));
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+          } catch (fetchErr) {
+            console.error(`Error al descargar imagen remota ${photo.url}:`, fetchErr);
+          }
+        }
+
+        let tags: string[] = [];
+        if (base64Data) {
+          tags = await analyzePhotoWithGemini(base64Data, key);
+        }
+
+        let locationText = "";
+        if (photo.latitude && photo.longitude) {
+          locationText = await getReverseGeocoding(photo.latitude, photo.longitude);
+        }
+
+        // Si se generaron etiquetas o se obtuvo ubicación, guardar metadatos
+        metadata[photo.name] = {
+          tags: tags.length > 0 ? tags : ["recuerdo", "familiar"],
+          location: locationText || undefined,
+        };
+        localStorage.setItem("family_album_photo_metadata", JSON.stringify(metadata));
+
+        // Notificar cambio al sistema para recargar listados reactivamente
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+      }
+
+      setRetroactiveMessage("¡Análisis retroactivo completado con éxito!");
+    } catch (err) {
+      console.error("Error en análisis retroactivo:", err);
+      setRetroactiveMessage(`Ocurrió un error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsAnalyzingRetroactive(false);
     }
   };
 
@@ -632,7 +791,17 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         </div>
 
         {/* Footer del Sidebar */}
-        <div className="p-4 border-t border-brand-navy/10 flex flex-col gap-3 bg-transparent">
+        <div className="p-4 border-t border-brand-navy/10 flex flex-col gap-2.5 bg-transparent">
+          {/* Botón de Ajustes de IA */}
+          <button
+            onClick={() => setIsAISettingsOpen(true)}
+            className="w-full py-1.5 px-3 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy flex items-center justify-center gap-2 rounded-xs text-[10px] font-semibold tracking-wider transition-colors cursor-pointer"
+          >
+            <svg className="w-3.5 h-3.5 text-brand-navy/60" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21m0 0l-.813-5.096m.813 5.096a11.95 11.95 0 01-3.078-1.323m3.078 1.323a11.95 11.95 0 003.078-1.323M9 21c3.41 0 6.561-1.42 8.828-3.712m-1.157-11.108l.813-5.096m0 0l.813 5.096m-1.157-11.108a9.753 9.753 0 00-7.34 2.732m0 0a9.753 9.753 0 00-2.732 7.34M15 3c-.027.64.12 1.28.435 1.833m0 0a3 3 0 003.732 1.323m-3.732-1.323L19.5 3m-9.813 12.904L3 15m0 0l5.096-.813m-5.096.813a9.753 9.753 0 002.732 7.34m0 0a9.753 9.753 0 007.34-2.732M9 21c-.027-.64-.12-1.28-.435-1.833m0 0a3 3 0 00-3.732-1.323m3.732 1.323L3 21" />
+            </svg>
+            Ajustes de IA Inteligente
+          </button>
           <button
             onClick={handleLogout}
             className="w-full py-1.5 px-3 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy hover:text-red-600 rounded-xs text-[10px] font-semibold tracking-wider transition-colors cursor-pointer text-center"
@@ -668,6 +837,121 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
               >
                 Eliminar Álbum
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Ajustes de IA (Gemini) */}
+      {isAISettingsOpen && (
+        <div className="fixed inset-0 bg-brand-navy/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-brand-cream border border-brand-navy/20 rounded-xs p-6 max-w-md w-full space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 relative">
+            {!isAnalyzingRetroactive && (
+              <button
+                onClick={() => {
+                  setIsAISettingsOpen(false);
+                  setRetroactiveMessage("");
+                }}
+                className="absolute top-4 right-4 text-brand-navy/40 hover:text-brand-navy transition-colors p-1 cursor-pointer"
+                title="Cerrar ajustes"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+
+            <div className="space-y-1 bg-transparent text-left">
+              <h3 className="text-base font-semibold text-brand-navy flex items-center gap-2">
+                <span className="text-lg">✨</span> Ajustes de Inteligencia Artificial
+              </h3>
+              <p className="text-[11px] text-brand-navy/50 leading-relaxed">
+                Configura tu clave de API de Gemini para habilitar el etiquetado inteligente automático de todas tus fotos familiares en segundo plano.
+              </p>
+            </div>
+
+            {/* Input de API Key */}
+            <div className="space-y-2 bg-transparent text-left">
+              <label className="text-[10px] uppercase font-bold text-brand-navy/60 tracking-wider">
+                Gemini API Key
+              </label>
+              <div className="flex gap-2 bg-transparent">
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  disabled={isAnalyzingRetroactive}
+                  placeholder="Introduce tu clave API de Gemini..."
+                  className="flex-1 px-3 py-1.5 border border-brand-navy/15 rounded-xs text-xs bg-transparent text-brand-navy focus:outline-none focus:border-brand-navy disabled:opacity-50"
+                />
+                <button
+                  onClick={() => {
+                    if (apiKeyInput.trim()) {
+                      localStorage.setItem("family_album_gemini_api_key", apiKeyInput.trim());
+                      setRetroactiveMessage("¡Clave de API guardada correctamente!");
+                    } else {
+                      localStorage.removeItem("family_album_gemini_api_key");
+                      setRetroactiveMessage("Clave de API eliminada.");
+                    }
+                  }}
+                  disabled={isAnalyzingRetroactive}
+                  className="px-3.5 py-1.5 bg-brand-navy text-brand-cream text-xs font-semibold rounded-xs hover:bg-brand-navy/90 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Guardar
+                </button>
+              </div>
+              <p className="text-[9px] text-brand-navy/40">
+                Tu clave se guarda localmente en el navegador y nunca se envía a ningún otro servidor que no sea la API de Google Gemini.
+              </p>
+            </div>
+
+            {/* Sección de Análisis Retroactivo */}
+            <div className="border-t border-brand-navy/10 pt-4 space-y-3 bg-transparent text-left">
+              <div className="bg-transparent">
+                <h4 className="text-xs font-bold text-brand-navy uppercase tracking-wider">
+                  Etiquetado Retroactivo
+                </h4>
+                <p className="text-[10px] text-brand-navy/50 leading-normal mt-0.5">
+                  Analiza y genera etiquetas automáticamente para todos los recuerdos que ya tenías guardados antes de activar la IA.
+                </p>
+              </div>
+
+              {isAnalyzingRetroactive ? (
+                <div className="space-y-2.5 bg-transparent">
+                  <div className="flex justify-between items-center text-[10px] font-semibold text-brand-navy bg-transparent">
+                    <span className="truncate max-w-[200px]">{retroactiveMessage}</span>
+                    <span>
+                      {retroactiveProgress.current} / {retroactiveProgress.total} (
+                      {Math.round((retroactiveProgress.current / retroactiveProgress.total) * 100)}%)
+                    </span>
+                  </div>
+                  {/* Barra de progreso premium */}
+                  <div className="w-full h-1.5 bg-brand-navy/5 rounded-full overflow-hidden border border-brand-navy/5">
+                    <div
+                      className="h-full bg-brand-navy transition-all duration-300"
+                      style={{
+                        width: `${(retroactiveProgress.current / retroactiveProgress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 bg-transparent">
+                  <button
+                    onClick={handleRetroactiveAnalysis}
+                    className="w-full py-2 bg-brand-cream border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy text-xs font-semibold rounded-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>✨</span> Analizar fotos existentes ahora
+                  </button>
+                  {retroactiveMessage && (
+                    <p className={`text-[10px] text-center font-medium ${
+                      retroactiveMessage.includes("Error") ? "text-red-600" : "text-green-700"
+                    }`}>
+                      {retroactiveMessage}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
