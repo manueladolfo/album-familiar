@@ -25,26 +25,25 @@ export default function TrashPage() {
   const fetchTrashPhotos = async () => {
     try {
       setLoading(true);
+      const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
+      let allPhotos: PhotoItem[] = [];
 
-      let remotePhotos: PhotoItem[] = [];
+      if (!localActive) {
+        // --- MODO ONLINE: Solo Supabase ---
+        try {
+          const { data: storageData, error } = await supabase.storage
+            .from("family-album")
+            .list("thumbnails", {
+              limit: 100,
+              sortBy: { column: "created_at", order: "desc" },
+            });
 
-      // 1. Intentar obtener archivos del Storage
-      try {
-        const { data: storageData, error } = await supabase.storage
-          .from("family-album")
-          .list("thumbnails", {
-            limit: 100,
-            sortBy: { column: "created_at", order: "desc" },
-          });
+          if (error) throw error;
 
-        if (error) throw error;
+          if (storageData) {
+            const validFiles = storageData.filter((file) => file.name !== ".emptyFolderPlaceholder");
 
-        if (storageData) {
-          const validFiles = storageData.filter((file) => file.name !== ".emptyFolderPlaceholder");
-
-          // Obtener mapeo de estados remotos
-          let dbStatusMappings: Record<string, string> = {};
-          try {
+            let dbStatusMappings: Record<string, string> = {};
             const { data: dbPhotos } = await supabase
               .from("photos")
               .select("id, status")
@@ -54,59 +53,46 @@ export default function TrashPage() {
                 if (p.status) dbStatusMappings[p.id] = p.status;
               });
             }
-          } catch {
-            // Ignorar
+
+            allPhotos = validFiles.map((file) => {
+              const { data: urlData } = supabase.storage
+                .from("family-album")
+                .getPublicUrl(`thumbnails/${file.name}`);
+
+              const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+              const cleanPhotoId = nameWithoutExt.split(".")[0];
+              const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : file.name;
+
+              const status = dbStatusMappings[photoId] || null;
+
+              return {
+                name: file.name,
+                url: urlData.publicUrl,
+                created_at: file.created_at,
+                status: status,
+              };
+            });
           }
-
-          const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-          const localStatusMappings = JSON.parse(localStatusMappingsJson);
-
-          const combinedStatusMappings = { ...dbStatusMappings, ...localStatusMappings };
-
-          remotePhotos = validFiles.map((file) => {
-            const { data: urlData } = supabase.storage
-              .from("family-album")
-              .getPublicUrl(`thumbnails/${file.name}`);
-
-            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-            const cleanPhotoId = nameWithoutExt.split(".")[0];
-            const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : file.name;
-
-            const status = combinedStatusMappings[photoId] || null;
-
-            return {
-              name: file.name,
-              url: urlData.publicUrl,
-              created_at: file.created_at,
-              status: status,
-            };
-          });
+        } catch (err) {
+          console.error("Fallo al conectar con Supabase en la papelera:", err);
+          window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+          return;
         }
-      } catch (err) {
-        console.warn("Fallo al conectar con Supabase Storage en la papelera. Operando localmente...");
+      } else {
+        // --- MODO LOCAL ---
+        const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+        const localPhotos: PhotoItem[] = JSON.parse(localPhotosJson);
+
+        const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+        const localStatusMappings = JSON.parse(localStatusMappingsJson);
+
+        allPhotos = localPhotos.map((photo) => ({
+          ...photo,
+          status: localStatusMappings[photo.name] !== undefined ? localStatusMappings[photo.name] : photo.status,
+        }));
       }
 
-      // 2. Obtener fotos locales sembradas/importadas de LocalStorage
-      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-      const localPhotos: PhotoItem[] = JSON.parse(localPhotosJson);
-
-      const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-      const localStatusMappings = JSON.parse(localStatusMappingsJson);
-
-      const updatedLocalPhotos = localPhotos.map((photo) => ({
-        ...photo,
-        status: localStatusMappings[photo.name] !== undefined ? localStatusMappings[photo.name] : photo.status,
-      }));
-
-      // 3. Combinar
-      const allPhotos = [...remotePhotos];
-      updatedLocalPhotos.forEach((localPhoto) => {
-        if (!allPhotos.some((p) => p.name === localPhoto.name)) {
-          allPhotos.push(localPhoto);
-        }
-      });
-
-      // 4. Filtrar fotos con status === 'trash'
+      // Filtrar fotos con status === 'trash'
       const trashPhotos = allPhotos
         .filter((photo) => photo.status === "trash")
         .sort((a, b) => {
@@ -115,7 +101,6 @@ export default function TrashPage() {
           return dateB - dateA;
         });
 
-      // Cargar personas, tags de personas y metadata de IA
       const peopleJson = localStorage.getItem("family_album_people") || "[]";
       setPeople(JSON.parse(peopleJson));
 
@@ -140,35 +125,46 @@ export default function TrashPage() {
 
   useEffect(() => {
     fetchTrashPhotos();
+
+    window.addEventListener("local-mode-changed", fetchTrashPhotos);
+    return () => {
+      window.removeEventListener("local-mode-changed", fetchTrashPhotos);
+    };
   }, []);
 
   // Restaurar una foto
   const restorePhoto = async (photoName: string) => {
-    try {
-      const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
-      const cleanPhotoId = nameWithoutExt.split(".")[0];
-      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-      // 1. Intentar actualizar en base de datos Supabase solo si el ID es UUID válido
-      if (isValidUUID(photoId)) {
-        const { error } = await supabase
-          .from("photos")
-          .update({ status: "active" })
-          .eq("id", photoId);
+    if (!localActive) {
+      try {
+        const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
+        const cleanPhotoId = nameWithoutExt.split(".")[0];
+        const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
 
-        if (error) throw error;
-        console.log("Foto restaurada en Supabase correctamente:", photoId);
+        if (isValidUUID(photoId)) {
+          const { error } = await supabase
+            .from("photos")
+            .update({ status: "active" })
+            .eq("id", photoId);
+
+          if (error) throw error;
+          console.log("Foto restaurada en Supabase correctamente:", photoId);
+        }
+
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        setStatusMessage({ type: "success", text: "Foto restaurada con éxito en la biblioteca." });
+        await fetchTrashPhotos();
+      } catch (err) {
+        console.error("Fallo al restaurar en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
-    } catch (err) {
-      console.warn("Fallo al restaurar en base de datos. Usando LocalStorage fallback...", err);
-    } finally {
-      // 2. Guardar en LocalStorage como fallback
+    } else {
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
       const localStatusMappings = JSON.parse(localStatusMappingsJson);
       localStatusMappings[photoName] = "active";
       localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
 
-      // 3. Emitir evento global y recargar la vista
       window.dispatchEvent(new CustomEvent("photo-moved"));
       setStatusMessage({ type: "success", text: "Foto restaurada con éxito en la biblioteca." });
       await fetchTrashPhotos();
@@ -177,174 +173,197 @@ export default function TrashPage() {
 
   // Vaciar papelera (borrado definitivo)
   const emptyTrash = async () => {
-    try {
-      setDeleting(true);
-      setShowConfirmModal(false);
-      setStatusMessage(null);
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-      // Listar rutas de archivos a borrar
-      const pathsToDeleteFromStorage: string[] = [];
-      const idsToDeleteFromDb: string[] = [];
+    if (!localActive) {
+      try {
+        setDeleting(true);
+        setShowConfirmModal(false);
+        setStatusMessage(null);
 
-      photos.forEach((photo) => {
-        const nameWithoutWebp = photo.name.replace(/\.webp$/, "");
-        
-        // Agregar miniatura y original para borrar en Storage
-        pathsToDeleteFromStorage.push(`thumbnails/${photo.name}`);
-        // Nota: para el original, asumimos que tiene la extension de la subida, pero no la conocemos con certeza.
-        // Un truco seguro: borramos `originals/${nameWithoutWebp}` y tambien podemos intentar borrar
-        // con las extensiones comunes (.jpg, .jpeg, .png, .webp) para asegurar limpieza completa.
-        pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.jpg`);
-        pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.jpeg`);
-        pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.png`);
-        pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.webp`);
+        const pathsToDeleteFromStorage: string[] = [];
+        const idsToDeleteFromDb: string[] = [];
 
-        const nameWithoutExt = photo.name.replace(/\.[^/.]+$/, "");
-        const cleanPhotoId = nameWithoutExt.split(".")[0];
-        const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photo.name;
+        photos.forEach((photo) => {
+          const nameWithoutWebp = photo.name.replace(/\.webp$/, "");
+          pathsToDeleteFromStorage.push(`thumbnails/${photo.name}`);
+          pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.jpg`);
+          pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.jpeg`);
+          pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.png`);
+          pathsToDeleteFromStorage.push(`originals/${nameWithoutWebp}.webp`);
 
-        idsToDeleteFromDb.push(photoId);
-      });
+          const nameWithoutExt = photo.name.replace(/\.[^/.]+$/, "");
+          const cleanPhotoId = nameWithoutExt.split(".")[0];
+          const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photo.name;
+          idsToDeleteFromDb.push(photoId);
+        });
 
-      // 1. Borrar en Supabase Storage
-      const { error: storageError } = await supabase.storage
-        .from("family-album")
-        .remove(pathsToDeleteFromStorage);
+        // 1. Borrar en Storage
+        const { error: storageError } = await supabase.storage
+          .from("family-album")
+          .remove(pathsToDeleteFromStorage);
 
-      if (storageError) {
-        console.warn("Error al borrar archivos de Storage:", storageError.message);
-      }
+        if (storageError) throw storageError;
 
-      // 2. Borrar registros de Supabase Database (solo IDs que son UUIDs válidos)
-      const validUUIDs = idsToDeleteFromDb.filter(isValidUUID);
-      if (validUUIDs.length > 0) {
-        try {
+        // 2. Borrar en base de datos
+        const validUUIDs = idsToDeleteFromDb.filter(isValidUUID);
+        if (validUUIDs.length > 0) {
           const { error: dbError } = await supabase
             .from("photos")
             .delete()
             .in("id", validUUIDs);
           if (dbError) throw dbError;
-        } catch {
-          console.warn("Error al borrar de base de datos de Supabase (RLS). Continuando localmente...");
         }
+
+        setStatusMessage({
+          type: "success",
+          text: "La papelera ha sido vaciada de forma definitiva.",
+        });
+
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        setPhotos([]);
+      } catch (err: any) {
+        console.error("Fallo al vaciar papelera en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+      } finally {
+        setDeleting(false);
       }
+    } else {
+      // MODO LOCAL
+      try {
+        setDeleting(true);
+        setShowConfirmModal(false);
+        setStatusMessage(null);
 
-      // 3. Borrar de LocalStorage
-      const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-      const localStatusMappings = JSON.parse(localStatusMappingsJson);
-      
-      const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
-      const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
+        const idsToDelete: string[] = photos.map((p) => p.name);
 
-      idsToDeleteFromDb.forEach((id) => {
-        delete localStatusMappings[id];
-        delete localAlbumMappings[id];
-      });
+        const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+        const localStatusMappings = JSON.parse(localStatusMappingsJson);
+        
+        const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+        const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
 
-      localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
-      localStorage.setItem("family_album_photo_mappings", JSON.stringify(localAlbumMappings));
+        idsToDelete.forEach((id) => {
+          delete localStatusMappings[id];
+          delete localAlbumMappings[id];
+        });
 
-      // También borrar del array de fotos locales
-      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-      let localPhotos = JSON.parse(localPhotosJson);
-      localPhotos = localPhotos.filter((p: any) => !idsToDeleteFromDb.includes(p.name));
-      localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
+        localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
+        localStorage.setItem("family_album_photo_mappings", JSON.stringify(localAlbumMappings));
 
-      setStatusMessage({
-        type: "success",
-        text: "La papelera ha sido vaciada de forma definitiva.",
-      });
+        const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+        let localPhotos = JSON.parse(localPhotosJson);
+        localPhotos = localPhotos.filter((p: any) => !idsToDelete.includes(p.name));
+        localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
 
-      // Notificar cambio
-      window.dispatchEvent(new CustomEvent("photo-moved"));
-      setPhotos([]);
-    } catch (err: any) {
-      console.error("Error al vaciar papelera:", err);
-      setStatusMessage({
-        type: "error",
-        text: err.message || "Error al vaciar la papelera.",
-      });
-    } finally {
-      setDeleting(false);
+        setStatusMessage({
+          type: "success",
+          text: "La papelera ha sido vaciada de forma definitiva.",
+        });
+
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        setPhotos([]);
+      } catch (err: any) {
+        console.error("Error al vaciar papelera local:", err);
+        setStatusMessage({
+          type: "error",
+          text: err.message || "Error al vaciar la papelera.",
+        });
+      } finally {
+        setDeleting(false);
+      }
     }
   };
 
   // Borrar una sola foto definitivamente de la papelera
   const deleteSinglePhoto = async (photoName: string) => {
-    try {
-      setDeleting(true);
-      setStatusMessage(null);
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-      const nameWithoutWebp = photoName.replace(/\.webp$/, "");
-      const pathsToDeleteFromStorage = [
-        `thumbnails/${photoName}`,
-        `originals/${nameWithoutWebp}.jpg`,
-        `originals/${nameWithoutWebp}.jpeg`,
-        `originals/${nameWithoutWebp}.png`,
-        `originals/${nameWithoutWebp}.webp`,
-      ];
+    if (!localActive) {
+      try {
+        setDeleting(true);
+        setStatusMessage(null);
 
-      // 1. Borrar en Supabase Storage
-      const { error: storageError } = await supabase.storage
-        .from("family-album")
-        .remove(pathsToDeleteFromStorage);
+        const nameWithoutWebp = photoName.replace(/\.webp$/, "");
+        const pathsToDeleteFromStorage = [
+          `thumbnails/${photoName}`,
+          `originals/${nameWithoutWebp}.jpg`,
+          `originals/${nameWithoutWebp}.jpeg`,
+          `originals/${nameWithoutWebp}.png`,
+          `originals/${nameWithoutWebp}.webp`,
+        ];
 
-      if (storageError) {
-        console.warn("Error al borrar archivo de Storage:", storageError.message);
-      }
+        // 1. Borrar en Storage
+        const { error: storageError } = await supabase.storage
+          .from("family-album")
+          .remove(pathsToDeleteFromStorage);
 
-      // 2. Borrar registro de Supabase Database (si es UUID válido)
-      const cleanPhotoId = nameWithoutWebp.split(".")[0];
-      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+        if (storageError) throw storageError;
 
-      if (isValidUUID(photoId)) {
-        try {
+        // 2. Borrar registro
+        const cleanPhotoId = nameWithoutWebp.split(".")[0];
+        const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+
+        if (isValidUUID(photoId)) {
           const { error: dbError } = await supabase
             .from("photos")
             .delete()
             .eq("id", photoId);
           if (dbError) throw dbError;
-          console.log("Registro de base de datos borrado en Supabase:", photoId);
-        } catch (dbErr) {
-          console.warn("Error al borrar de base de datos de Supabase (RLS). Continuando localmente...", dbErr);
         }
+
+        setStatusMessage({
+          type: "success",
+          text: "La foto ha sido eliminada definitivamente.",
+        });
+
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        await fetchTrashPhotos();
+      } catch (err: any) {
+        console.error("Fallo al borrar foto en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+      } finally {
+        setDeleting(false);
       }
+    } else {
+      // MODO LOCAL
+      try {
+        setDeleting(true);
+        setStatusMessage(null);
 
-      // 3. Borrar de LocalStorage
-      const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-      const localStatusMappings = JSON.parse(localStatusMappingsJson);
-      
-      const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
-      const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
+        const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+        const localStatusMappings = JSON.parse(localStatusMappingsJson);
+        
+        const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+        const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
 
-      delete localStatusMappings[photoName];
-      delete localAlbumMappings[photoName];
+        delete localStatusMappings[photoName];
+        delete localAlbumMappings[photoName];
 
-      localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
-      localStorage.setItem("family_album_photo_mappings", JSON.stringify(localAlbumMappings));
+        localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
+        localStorage.setItem("family_album_photo_mappings", JSON.stringify(localAlbumMappings));
 
-      // También borrar del array de fotos locales
-      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-      let localPhotos = JSON.parse(localPhotosJson);
-      localPhotos = localPhotos.filter((p: any) => p.name !== photoName);
-      localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
+        const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+        let localPhotos = JSON.parse(localPhotosJson);
+        localPhotos = localPhotos.filter((p: any) => p.name !== photoName);
+        localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
 
-      setStatusMessage({
-        type: "success",
-        text: "La foto ha sido eliminada definitivamente.",
-      });
+        setStatusMessage({
+          type: "success",
+          text: "La foto ha sido eliminada definitivamente.",
+        });
 
-      // Notificar cambio
-      window.dispatchEvent(new CustomEvent("photo-moved"));
-      await fetchTrashPhotos();
-    } catch (err: any) {
-      console.error("Error al borrar foto:", err);
-      setStatusMessage({
-        type: "error",
-        text: err.message || "Error al borrar la foto.",
-      });
-    } finally {
-      setDeleting(false);
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        await fetchTrashPhotos();
+      } catch (err: any) {
+        console.error("Error al borrar foto local:", err);
+        setStatusMessage({
+          type: "error",
+          text: err.message || "Error al borrar la foto.",
+        });
+      } finally {
+        setDeleting(false);
+      }
     }
   };
 

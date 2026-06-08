@@ -7,6 +7,19 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isLocalMode, setIsLocalMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const checkLocalMode = () => {
+      setIsLocalMode(localStorage.getItem("family_album_local_mode_active") === "true");
+    };
+    checkLocalMode();
+    window.addEventListener("local-mode-changed", checkLocalMode);
+    return () => {
+      window.removeEventListener("local-mode-changed", checkLocalMode);
+    };
+  }, []);
 
   // Búsqueda
   const [searchVal, setSearchVal] = useState<string>("");
@@ -108,7 +121,7 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
   }, [pathname]);
 
   return (
-    <header className="h-16 fixed top-0 right-0 left-0 md:left-[280px] bg-brand-cream/90 backdrop-blur-md border-b border-brand-navy/10 flex items-center justify-between px-4 md:px-8 z-10">
+    <header className={`h-16 fixed ${isLocalMode ? "top-8" : "top-0"} right-0 left-0 md:left-[280px] bg-brand-cream/90 backdrop-blur-md border-b border-brand-navy/10 flex items-center justify-between px-4 md:px-8 z-10 transition-all duration-300`}>
       {/* Lado izquierdo: Botón menú móvil + Título */}
       <div className="flex items-center gap-3 bg-transparent">
         {onOpenSidebar && (

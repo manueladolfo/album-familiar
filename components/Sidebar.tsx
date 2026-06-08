@@ -41,6 +41,19 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [hearts, setHearts] = useState<FloatingHeart[]>([]);
   const [dragOverAlbumId, setDragOverAlbumId] = useState<string | null>(null);
+  const [isLocalMode, setIsLocalMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const checkLocalMode = () => {
+      setIsLocalMode(localStorage.getItem("family_album_local_mode_active") === "true");
+    };
+    checkLocalMode();
+    window.addEventListener("local-mode-changed", checkLocalMode);
+    return () => {
+      window.removeEventListener("local-mode-changed", checkLocalMode);
+    };
+  }, []);
 
   useEffect(() => {
     const checkAdmin = () => {
@@ -144,27 +157,32 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
     if (e) e.preventDefault();
     if (!newAlbumName.trim()) return;
 
-    // Generar UUID v4 válido para evitar errores de tipo en Supabase
     const newId = generateUUID();
     const newAlbum: AlbumItem = { id: newId, name: newAlbumName.trim() };
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-    try {
-      // 1. Intentar registrar en Supabase
-      const { error } = await supabase.from("albums").insert(newAlbum);
-      if (error) throw error;
-    } catch (err) {
-      console.warn("Fallo al crear álbum en Supabase (RLS). Guardando en LocalStorage fallback...", err instanceof Error ? err.message : String(err));
-    } finally {
-      // 2. Guardar localmente
+    if (!localActive) {
+      try {
+        const { error } = await supabase.from("albums").insert(newAlbum);
+        if (error) throw error;
+        
+        setNewAlbumName("");
+        setIsCreating(false);
+        await loadAlbums();
+        window.dispatchEvent(new CustomEvent("refresh-albums"));
+      } catch (err) {
+        console.error("Fallo al crear álbum en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+      }
+    } else {
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
       const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
       localAlbums.push(newAlbum);
       localStorage.setItem("family_album_local_albums", JSON.stringify(localAlbums));
 
-      // 3. Resetear UI y disparar recarga
       setNewAlbumName("");
       setIsCreating(false);
-      loadAlbums();
+      await loadAlbums();
       window.dispatchEvent(new CustomEvent("refresh-albums"));
     }
   };
@@ -175,20 +193,26 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
       setEditingAlbumId(null);
       return;
     }
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-    try {
-      // 1. Intentar renombrar en Supabase solo si el ID es un UUID válido
-      if (isValidUUID(albumId)) {
-        const { error } = await supabase
-          .from("albums")
-          .update({ name: editingAlbumName.trim() })
-          .eq("id", albumId);
-        if (error) throw error;
+    if (!localActive) {
+      try {
+        if (isValidUUID(albumId)) {
+          const { error } = await supabase
+            .from("albums")
+            .update({ name: editingAlbumName.trim() })
+            .eq("id", albumId);
+          if (error) throw error;
+        }
+        setEditingAlbumId(null);
+        await loadAlbums();
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        window.dispatchEvent(new CustomEvent("refresh-albums"));
+      } catch (err) {
+        console.error("Fallo al renombrar álbum en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
-    } catch (err) {
-      console.warn("Fallo al renombrar álbum en Supabase (RLS). Guardando en LocalStorage fallback...", err instanceof Error ? err.message : String(err));
-    } finally {
-      // 2. Renombrar en LocalStorage
+    } else {
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
       if (localAlbumsJson) {
         let localAlbums = JSON.parse(localAlbumsJson);
@@ -197,26 +221,41 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         );
         localStorage.setItem("family_album_local_albums", JSON.stringify(localAlbums));
       }
-
-      // 3. Resetear UI y disparar eventos
       setEditingAlbumId(null);
-      loadAlbums();
+      await loadAlbums();
       window.dispatchEvent(new CustomEvent("photo-moved"));
+      window.dispatchEvent(new CustomEvent("refresh-albums"));
     }
   };
 
   // Eliminar Álbum (confirmado)
   const handleDeleteAlbum = async (albumId: string) => {
-    try {
-      // 1. Intentar eliminar en Supabase solo si el ID es un UUID válido
-      if (isValidUUID(albumId)) {
-        const { error } = await supabase.from("albums").delete().eq("id", albumId);
-        if (error) throw error;
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
+
+    if (!localActive) {
+      try {
+        if (isValidUUID(albumId)) {
+          await supabase
+            .from("photos")
+            .update({ album_id: null })
+            .eq("album_id", albumId);
+
+          const { error } = await supabase.from("albums").delete().eq("id", albumId);
+          if (error) throw error;
+        }
+
+        setShowConfirmDelete(null);
+        await loadAlbums();
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        window.dispatchEvent(new CustomEvent("refresh-albums"));
+        if (pathname === `/album/${albumId}`) {
+          router.push("/");
+        }
+      } catch (err) {
+        console.error("Fallo al eliminar álbum en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
-    } catch (err) {
-      console.warn("Fallo al eliminar álbum en Supabase (RLS). Continuando localmente...", err instanceof Error ? err.message : String(err));
-    } finally {
-      // 2. Eliminar de LocalStorage
+    } else {
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
       if (localAlbumsJson) {
         let localAlbums = JSON.parse(localAlbumsJson);
@@ -224,19 +263,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         localStorage.setItem("family_album_local_albums", JSON.stringify(localAlbums));
       }
 
-      // 3. Desvincular fotos de este álbum
-      // 3a. En Supabase
-      try {
-        if (isValidUUID(albumId)) {
-          await supabase
-            .from("photos")
-            .update({ album_id: null })
-            .eq("album_id", albumId);
-        }
-      } catch {
-        // Ignorar
-      }
-      // 3b. En LocalStorage mappings
       const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
       const mappings = JSON.parse(mappingsJson);
       Object.keys(mappings).forEach((pName) => {
@@ -246,12 +272,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
       });
       localStorage.setItem("family_album_photo_mappings", JSON.stringify(mappings));
 
-      // 4. Limpiar UI y notificar cambio global
       setShowConfirmDelete(null);
-      loadAlbums();
+      await loadAlbums();
       window.dispatchEvent(new CustomEvent("photo-moved"));
-      
-      // Si el usuario estaba actualmente en la página del álbum eliminado, redirigir al Dashboard
+      window.dispatchEvent(new CustomEvent("refresh-albums"));
       if (pathname === `/album/${albumId}`) {
         router.push("/");
       }
@@ -271,35 +295,24 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
     router.push("/login");
   };
 
-  // Cargar álbumes de Supabase con fallback local
+  // Cargar álbumes de Supabase o local
   const loadAlbums = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("albums")
-        .select("id, name, created_at")
-        .order("name");
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-      if (error) throw error;
+    if (!localActive) {
+      try {
+        const { data, error } = await supabase
+          .from("albums")
+          .select("id, name, created_at")
+          .order("name");
 
-      if (data && data.length > 0) {
-        setAlbums(data);
-      } else {
-        // Inicializar álbumes locales en LocalStorage si no hay en base de datos
-        const localAlbumsJson = localStorage.getItem("family_album_local_albums");
-        if (localAlbumsJson) {
-          setAlbums(JSON.parse(localAlbumsJson));
-        } else {
-          const defaultAlbums: AlbumItem[] = [
-            { id: "d1a60111-92b0-4f81-b51f-d748ad0a7201", name: "Vacaciones" },
-            { id: "d2a60222-92b0-4f81-b51f-d748ad0a7202", name: "Familia" },
-            { id: "d3a60333-92b0-4f81-b51f-d748ad0a7203", name: "Cumpleaños" },
-          ];
-          localStorage.setItem("family_album_local_albums", JSON.stringify(defaultAlbums));
-          setAlbums(defaultAlbums);
-        }
+        if (error) throw error;
+        if (data) setAlbums(data);
+      } catch (err) {
+        console.error("Fallo al cargar álbumes de Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
-    } catch {
-      console.warn("Fallo al leer álbumes de Supabase (posible RLS). Cargando localmente...");
+    } else {
       const localAlbumsJson = localStorage.getItem("family_album_local_albums");
       if (localAlbumsJson) {
         setAlbums(JSON.parse(localAlbumsJson));
@@ -461,10 +474,13 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
   useEffect(() => {
     loadAlbums();
 
-    // Escuchar si se crean álbumes externamente
     const handleRefreshAlbums = () => loadAlbums();
     window.addEventListener("refresh-albums", handleRefreshAlbums);
-    return () => window.removeEventListener("refresh-albums", handleRefreshAlbums);
+    window.addEventListener("local-mode-changed", handleRefreshAlbums);
+    return () => {
+      window.removeEventListener("refresh-albums", handleRefreshAlbums);
+      window.removeEventListener("local-mode-changed", handleRefreshAlbums);
+    };
   }, []);
 
   // Lógica de Drag & Drop
@@ -483,30 +499,40 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
     
     const photoId = e.dataTransfer.getData("text/plain");
     if (!photoId) return;
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-    try {
-      console.log(`Asociando foto ${photoId} al álbum ${albumId}`);
+    if (!localActive) {
+      try {
+        console.log(`Asociando foto ${photoId} al álbum ${albumId} en Supabase`);
+        const nameWithoutExt = photoId.replace(/\.[^/.]+$/, "");
+        const cleanPhotoId = nameWithoutExt.split(".")[0];
+        const uuidPhotoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoId;
 
-      // 1. Intentar actualizar en Supabase Database solo si ambos IDs son UUIDs válidos
-      if (isValidUUID(albumId) && isValidUUID(photoId)) {
-        const { error } = await supabase
-          .from("photos")
-          .update({ album_id: albumId })
-          .eq("id", photoId);
+        if (isValidUUID(albumId) && isValidUUID(uuidPhotoId)) {
+          const { error } = await supabase
+            .from("photos")
+            .update({ album_id: albumId })
+            .eq("id", uuidPhotoId);
 
-        if (error) throw error;
-        console.log("Actualizado en Supabase correctamente");
+          if (error) throw error;
+          console.log("Actualizado en Supabase correctamente");
+          
+          window.dispatchEvent(
+            new CustomEvent("photo-moved", {
+              detail: { photoId, albumId },
+            })
+          );
+        }
+      } catch (err) {
+        console.error("Fallo al actualizar en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
-    } catch {
-      console.warn("Fallo al actualizar en Supabase (RLS). Guardando en LocalStorage fallback...");
-    } finally {
-      // 2. Persistir en LocalStorage como fallback siempre (para asegurar reactividad local instantánea)
+    } else {
       const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
       const mappings = JSON.parse(mappingsJson);
       mappings[photoId] = albumId;
       localStorage.setItem("family_album_photo_mappings", JSON.stringify(mappings));
 
-      // 3. Emitir evento global indicando que la foto se movió
       window.dispatchEvent(
         new CustomEvent("photo-moved", {
           detail: { photoId, albumId },
@@ -517,7 +543,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
 
   return (
     <>
-      <aside className={`w-[280px] fixed inset-y-0 left-0 bg-brand-cream border-r border-brand-navy/10 flex flex-col z-30 transition-transform duration-300 ease-in-out md:translate-x-0 ${
+      <aside className={`w-[280px] fixed ${isLocalMode ? 'top-8' : 'top-0'} bottom-0 left-0 bg-brand-cream border-r border-brand-navy/10 flex flex-col z-30 transition-all duration-300 ease-in-out md:translate-x-0 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
         {/* Header con Logo */}

@@ -124,25 +124,38 @@ export default function PhotosPage() {
   }, []);
 
   const handleAddPhotoToAlbum = async (photoName: string, albumId: string | null) => {
-    try {
-      console.log(`Asociando foto ${photoName} al álbum ${albumId}`);
+    const isLocalMode = localStorage.getItem("family_album_local_mode_active") === "true";
 
-      const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
-      const cleanPhotoId = nameWithoutExt.split(".")[0];
-      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+    if (!isLocalMode) {
+      // MODO ONLINE: Solo Supabase
+      try {
+        console.log(`Asociando foto ${photoName} al álbum ${albumId} en Supabase`);
+        const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
+        const cleanPhotoId = nameWithoutExt.split(".")[0];
+        const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
 
-      if (isValidUUID(photoId) && (albumId === null || isValidUUID(albumId))) {
-        const { error } = await supabase
-          .from("photos")
-          .update({ album_id: albumId })
-          .eq("id", photoId);
+        if (isValidUUID(photoId) && (albumId === null || isValidUUID(albumId))) {
+          const { error } = await supabase
+            .from("photos")
+            .update({ album_id: albumId })
+            .eq("id", photoId);
 
-        if (error) throw error;
-        console.log("Actualizado en Supabase correctamente");
+          if (error) throw error;
+          console.log("Actualizado en Supabase correctamente");
+          
+          window.dispatchEvent(
+            new CustomEvent("photo-moved", {
+              detail: { photoId: photoName, albumId },
+            })
+          );
+          await fetchPhotos();
+        }
+      } catch (err) {
+        console.error("Fallo al actualizar en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
-    } catch (err) {
-      console.warn("Fallo al actualizar en Supabase (RLS). Guardando en LocalStorage fallback...", err);
-    } finally {
+    } else {
+      // MODO LOCAL: Solo LocalStorage
       const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
       const mappings = JSON.parse(mappingsJson);
       mappings[photoName] = albumId;
@@ -160,117 +173,105 @@ export default function PhotosPage() {
   // Cargar álbumes
   const fetchAlbums = async () => {
     try {
-      const { data } = await supabase.from("albums").select("id, name");
-      if (data && data.length > 0) {
-        setAlbums(data);
+      const isLocalMode = localStorage.getItem("family_album_local_mode_active") === "true";
+      if (!isLocalMode) {
+        const { data, error } = await supabase.from("albums").select("id, name");
+        if (error) throw error;
+        if (data) setAlbums(data);
       } else {
         const localAlbums = localStorage.getItem("family_album_local_albums");
         if (localAlbums) setAlbums(JSON.parse(localAlbums));
       }
-    } catch {
-      const localAlbums = localStorage.getItem("family_album_local_albums");
-      if (localAlbums) setAlbums(JSON.parse(localAlbums));
+    } catch (err) {
+      console.error("Error al cargar álbumes de Supabase:", err);
+      window.dispatchEvent(new CustomEvent("supabase-connection-error"));
     }
   };
+
   // Cargar fotos y cruzar con base de datos + LocalStorage + Semillero
   const fetchPhotos = async () => {
     try {
       setLoading(true);
+      const isLocalMode = localStorage.getItem("family_album_local_mode_active") === "true";
+      let allPhotos: PhotoItem[] = [];
 
-      let remotePhotos: PhotoItem[] = [];
+      if (!isLocalMode) {
+        // --- MODO ONLINE: Solo Supabase ---
+        try {
+          const { data: storageData, error: storageError } = await supabase.storage
+            .from("family-album")
+            .list("thumbnails", {
+              limit: 100,
+              sortBy: { column: "created_at", order: "desc" },
+            });
 
-      // 1. Intentar obtener archivos de Supabase Storage
-      try {
-        const { data: storageData, error } = await supabase.storage
-          .from("family-album")
-          .list("thumbnails", {
-            limit: 100,
-            sortBy: { column: "created_at", order: "desc" },
-          });
+          if (storageError) throw storageError;
 
-        if (error) throw error;
+          if (storageData) {
+            const validFiles = storageData.filter((file) => file.name !== ".emptyFolderPlaceholder");
 
-        if (storageData) {
-          const validFiles = storageData.filter((file) => file.name !== ".emptyFolderPlaceholder");
+            // Mappings remotos de base de datos
+            let dbAlbumMappings: Record<string, string> = {};
+            let dbStatusMappings: Record<string, string> = {};
+            
+            const { data: dbPhotos, error: dbPhotosError } = await supabase
+              .from("photos")
+              .select("id, album_id, status");
 
-          // Mappings remotos de base de datos
-          let dbAlbumMappings: Record<string, string> = {};
-          let dbStatusMappings: Record<string, string> = {};
-          try {
-            const { data: dbPhotos } = await supabase.from("photos").select("id, album_id, status");
+            if (dbPhotosError) throw dbPhotosError;
+
             if (dbPhotos) {
               dbPhotos.forEach((p) => {
                 if (p.album_id) dbAlbumMappings[p.id] = p.album_id;
                 if (p.status) dbStatusMappings[p.id] = p.status;
               });
             }
-          } catch {
-            // Ignorar
+
+            allPhotos = validFiles.map((file) => {
+              const { data: urlData } = supabase.storage
+                .from("family-album")
+                .getPublicUrl(`thumbnails/${file.name}`);
+
+              const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+              const cleanPhotoId = nameWithoutExt.split(".")[0];
+              const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : file.name;
+
+              const albumId = dbAlbumMappings[photoId] || null;
+              const status = dbStatusMappings[photoId] || null;
+
+              return {
+                name: file.name,
+                url: urlData.publicUrl,
+                created_at: file.created_at,
+                album_id: albumId,
+                status: status,
+              };
+            });
           }
-
-          // Combinar mappings temporales locales
-          const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
-          const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
-
-          const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-          const localStatusMappings = JSON.parse(localStatusMappingsJson);
-
-          const combinedAlbumMappings = { ...dbAlbumMappings, ...localAlbumMappings };
-          const combinedStatusMappings = { ...dbStatusMappings, ...localStatusMappings };
-
-          remotePhotos = validFiles.map((file) => {
-            const { data: urlData } = supabase.storage
-              .from("family-album")
-              .getPublicUrl(`thumbnails/${file.name}`);
-
-            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-            const cleanPhotoId = nameWithoutExt.split(".")[0];
-            const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : file.name;
-
-            const albumId = combinedAlbumMappings[photoId] || null;
-            const status = combinedStatusMappings[photoId] || null;
-
-            return {
-              name: file.name,
-              url: urlData.publicUrl,
-              created_at: file.created_at,
-              album_id: albumId,
-              status: status,
-            };
-          });
+        } catch (err) {
+          console.error("Error al cargar fotos de Supabase:", err);
+          window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+          return;
         }
-      } catch (err) {
-        console.warn("Fallo al conectar con Supabase Storage para fotos. Operando localmente...");
+      } else {
+        // --- MODO LOCAL ---
+        const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+        const localPhotos: PhotoItem[] = JSON.parse(localPhotosJson);
+
+        const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+        const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
+
+        const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+        const localStatusMappings = JSON.parse(localStatusMappingsJson);
+
+        allPhotos = localPhotos.map((photo) => ({
+          ...photo,
+          album_id: localAlbumMappings[photo.name] !== undefined ? localAlbumMappings[photo.name] : photo.album_id,
+          status: localStatusMappings[photo.name] !== undefined ? localStatusMappings[photo.name] : photo.status,
+        }));
       }
 
-      // 2. Obtener fotos locales sembradas/importadas de LocalStorage
-      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-      const localPhotos: PhotoItem[] = JSON.parse(localPhotosJson);
-
-      // Re-mapear estados de álbum y estado de papelera locales más recientes
-      const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
-      const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
-
-      const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-      const localStatusMappings = JSON.parse(localStatusMappingsJson);
-
-      const updatedLocalPhotos = localPhotos.map((photo) => ({
-        ...photo,
-        album_id: localAlbumMappings[photo.name] !== undefined ? localAlbumMappings[photo.name] : photo.album_id,
-        status: localStatusMappings[photo.name] !== undefined ? localStatusMappings[photo.name] : photo.status,
-      }));
-
-      // 3. Combinar fotos remotas y locales
-      const allPhotos = [...remotePhotos];
-      
-      // Añadir locales que no tengan el mismo nombre que una remota
-      updatedLocalPhotos.forEach((localPhoto) => {
-        if (!allPhotos.some((p) => p.name === localPhoto.name)) {
-          allPhotos.push(localPhoto);
-        }
-      });
-
-      // 4. Filtrar activas (omitir status === 'trash') y ordenar por fecha de creación
+      // Filtrar activas (omitir status === 'trash') y ordenar por fecha de creación
       const activePhotos = allPhotos
         .filter((photo) => photo.status !== "trash")
         .sort((a, b) => {
@@ -291,7 +292,7 @@ export default function PhotosPage() {
 
       setPhotos(activePhotos);
     } catch (error) {
-      console.error("Error al cargar fotos combinadas:", error instanceof Error ? error.message : String(error));
+      console.error("Error al cargar fotos combinadas:", error);
     } finally {
       setLoading(false);
     }
@@ -312,9 +313,13 @@ export default function PhotosPage() {
     const handleRefreshAlbums = () => fetchAlbums();
     window.addEventListener("photo-moved", handlePhotoMoved);
     window.addEventListener("refresh-albums", handleRefreshAlbums);
+    window.addEventListener("local-mode-changed", handlePhotoMoved);
+    window.addEventListener("local-mode-changed", handleRefreshAlbums);
     return () => {
       window.removeEventListener("photo-moved", handlePhotoMoved);
       window.removeEventListener("refresh-albums", handleRefreshAlbums);
+      window.removeEventListener("local-mode-changed", handlePhotoMoved);
+      window.removeEventListener("local-mode-changed", handleRefreshAlbums);
     };
   }, []);
 
@@ -414,6 +419,7 @@ export default function PhotosPage() {
 
       let successCount = 0;
       let errorCount = 0;
+      const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -462,55 +468,54 @@ export default function PhotosPage() {
           }
         }
 
-        let uploadSuccess = false;
         const thumbnailName = `${uniqueName}.${fileExt}.webp`;
 
-        // 1. Intentar subir imagen original a Supabase
-        try {
-          const originalPath = `originals/${uniqueName}.${fileExt}`;
-          const { error: origError } = await supabase.storage
-            .from("family-album")
-            .upload(originalPath, file, {
-              cacheControl: "3600",
-              upsert: false,
+        if (!localActive) {
+          // MODO ONLINE: Solo Supabase
+          try {
+            const originalPath = `originals/${uniqueName}.${fileExt}`;
+            const { error: origError } = await supabase.storage
+              .from("family-album")
+              .upload(originalPath, file, {
+                cacheControl: "3600",
+                upsert: false,
+              });
+
+            if (origError) throw origError;
+
+            const thumbnailPath = `thumbnails/${thumbnailName}`;
+            const { error: thumbError } = await supabase.storage
+              .from("family-album")
+              .upload(thumbnailPath, compressedBlob, {
+                contentType: "image/webp",
+                cacheControl: "3600",
+                upsert: false,
+              });
+
+            if (thumbError) {
+              await supabase.storage.from("family-album").remove([originalPath]);
+              throw thumbError;
+            }
+
+            const { error: dbError } = await supabase.from("photos").insert({
+              id: generateUUID(),
+              album_id: null,
+              status: "active",
+              latitude: latitude,
+              longitude: longitude,
             });
+            if (dbError) throw dbError;
 
-          if (origError) throw origError;
-
-          // 2. Intentar subir miniatura comprimida (WebP)
-          const thumbnailPath = `thumbnails/${thumbnailName}`;
-          const { error: thumbError } = await supabase.storage
-            .from("family-album")
-            .upload(thumbnailPath, compressedBlob, {
-              contentType: "image/webp",
-              cacheControl: "3600",
-              upsert: false,
-            });
-
-          if (thumbError) {
-            await supabase.storage.from("family-album").remove([originalPath]);
-            throw thumbError;
+            successCount++;
+            triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude);
+          } catch (err) {
+            console.error("Fallo al subir a Supabase en modo online:", err);
+            errorCount++;
+            window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+            break;
           }
-
-          // 3. Registrar en base de datos con UUID válido
-          const { error: dbError } = await supabase.from("photos").insert({
-            id: generateUUID(),
-            album_id: null,
-            status: "active",
-            latitude: latitude,
-            longitude: longitude,
-          });
-          if (dbError) throw dbError;
-
-          uploadSuccess = true;
-          // Evaluar IA y GPS en segundo plano
-          triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude);
-        } catch (err) {
-          console.warn("Fallo al subir a Supabase. Activando almacenamiento local de respaldo...", err instanceof Error ? err.message : String(err));
-        }
-
-        // Si no se subió a Supabase, guardamos localmente como fallback
-        if (!uploadSuccess) {
+        } else {
+          // MODO LOCAL: Solo LocalStorage
           const localThumbnailName = `${uniqueName}.webp`;
           try {
             const newPhoto: PhotoItem = {
@@ -523,31 +528,22 @@ export default function PhotosPage() {
               longitude: longitude,
             };
 
-            // Guardar en family_album_local_photos
             const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
             const localPhotos = JSON.parse(localPhotosJson);
             localPhotos.unshift(newPhoto);
             localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
 
-            // Guardar estado
             const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
             const localStatusMappings = JSON.parse(localStatusMappingsJson);
             localStatusMappings[localThumbnailName] = "active";
             localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
 
-            uploadSuccess = true;
-            // Evaluar IA y GPS en segundo plano
+            successCount++;
             triggerAIEvaluation(localThumbnailName, base64Image, latitude, longitude);
           } catch (fallbackErr) {
             console.error("Fallo al guardar en LocalStorage:", fallbackErr);
             errorCount++;
           }
-        }
-
-        if (uploadSuccess) {
-          successCount++;
-        } else {
-          errorCount++;
         }
       }
 
@@ -577,31 +573,36 @@ export default function PhotosPage() {
 
   // Mover foto a papelera (status = 'trash')
   const moveToTrash = async (photoName: string) => {
-    try {
-      const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
-      const cleanPhotoId = nameWithoutExt.split(".")[0];
-      const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-      // 1. Intentar actualizar en base de datos de Supabase solo si el ID es un UUID válido
-      if (isValidUUID(photoId)) {
-        const { error } = await supabase
-          .from("photos")
-          .update({ status: "trash" })
-          .eq("id", photoId);
+    if (!localActive) {
+      try {
+        const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
+        const cleanPhotoId = nameWithoutExt.split(".")[0];
+        const photoId = isValidUUID(cleanPhotoId) ? cleanPhotoId : photoName;
 
-        if (error) throw error;
-        console.log("Foto movida a la papelera en Supabase correctamente:", photoId);
+        if (isValidUUID(photoId)) {
+          const { error } = await supabase
+            .from("photos")
+            .update({ status: "trash" })
+            .eq("id", photoId);
+
+          if (error) throw error;
+          console.log("Foto movida a la papelera en Supabase correctamente:", photoId);
+        }
+        
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        await fetchPhotos();
+      } catch (err) {
+        console.error("Fallo al mover a papelera en Supabase:", err);
+        window.dispatchEvent(new CustomEvent("supabase-connection-error"));
       }
-    } catch (err) {
-      console.warn("Fallo en actualización de base de datos Supabase (RLS). Usando LocalStorage fallback...", err);
-    } finally {
-      // 2. Guardar en LocalStorage como fallback
+    } else {
       const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
       const localStatusMappings = JSON.parse(localStatusMappingsJson);
       localStatusMappings[photoName] = "trash";
       localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
 
-      // 3. Emitir evento global y refrescar localmente
       window.dispatchEvent(new CustomEvent("photo-moved"));
       await fetchPhotos();
     }

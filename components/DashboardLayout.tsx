@@ -24,6 +24,62 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [authorized, setAuthorized] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+  const [showConnectionError, setShowConnectionError] = useState<boolean>(false);
+  const [isLocalMode, setIsLocalMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsLocalMode(localStorage.getItem("family_album_local_mode_active") === "true");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Guardar fetch original
+    const originalFetch = window.fetch;
+
+    // Sobreescribir fetch
+    window.fetch = async function (input, init) {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const isSupabaseRequest = url.includes("supabase.co");
+
+      if (isSupabaseRequest) {
+        try {
+          const response = await originalFetch(input, init);
+          if (response.status >= 502 && response.status <= 504) {
+            window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+          }
+          return response;
+        } catch (error) {
+          window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+          throw error;
+        }
+      }
+
+      return originalFetch(input, init);
+    };
+
+    const handleConnectionError = () => {
+      const activeLocal = localStorage.getItem("family_album_local_mode_active") === "true";
+      if (!activeLocal) {
+        setShowConnectionError(true);
+      }
+    };
+
+    const handleLocalModeChanged = () => {
+      setIsLocalMode(localStorage.getItem("family_album_local_mode_active") === "true");
+    };
+
+    window.addEventListener("supabase-connection-error", handleConnectionError);
+    window.addEventListener("local-mode-changed", handleLocalModeChanged);
+
+    return () => {
+      window.fetch = originalFetch;
+      window.removeEventListener("supabase-connection-error", handleConnectionError);
+      window.removeEventListener("local-mode-changed", handleLocalModeChanged);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -111,7 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (needsMigration) {
             localStorage.setItem("family_album_local_albums", JSON.stringify(localAlbums));
 
-            // Actualizar mappings de fotos que referenciaban IDs antiguos
+            // Mappings de fotos que referenciaban IDs antiguos
             const mappingsJson = localStorage.getItem("family_album_photo_mappings");
             if (mappingsJson) {
               const mappings = JSON.parse(mappingsJson);
@@ -123,7 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               localStorage.setItem("family_album_photo_mappings", JSON.stringify(mappings));
             }
 
-            // Actualizar fotos locales que referenciaban album_id antiguos
+            // Fotos locales que referenciaban album_id antiguos
             const localPhotosJson = localStorage.getItem("family_album_local_photos");
             if (localPhotosJson) {
               let localPhotos = JSON.parse(localPhotosJson);
@@ -145,7 +201,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const isCleared = localStorage.getItem("family_album_cleared") === "true";
       const localPhotos = localStorage.getItem("family_album_local_photos");
 
-      
       if (!isCleared && !localPhotos) {
         // Sembrar álbumes locales por defecto
         const defaultAlbums = [
@@ -270,12 +325,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Para el resto de rutas, renderizamos la estructura de administración completa
   return (
-    <div className="flex-1 flex min-h-screen bg-brand-cream">
+    <div className="flex-1 flex min-h-screen bg-brand-cream relative">
+      {/* Barra superior de Modo Local */}
+      {isLocalMode && (
+        <div className="fixed top-0 left-0 right-0 h-8 bg-red-600 text-white flex items-center justify-between px-4 sm:px-6 text-[11px] font-semibold z-50 shadow-md">
+          <div className="flex items-center gap-2 bg-transparent">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            <span>MODO LOCAL, SIN CONEXIÓN CON EL SERVIDOR</span>
+          </div>
+          <button
+            onClick={() => {
+              localStorage.removeItem("family_album_local_mode_active");
+              window.dispatchEvent(new CustomEvent("local-mode-changed"));
+              window.dispatchEvent(new CustomEvent("photo-moved"));
+              window.location.reload();
+            }}
+            className="px-2.5 py-1 bg-white text-red-650 hover:bg-red-50 rounded-xs text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+          >
+            Intentar reconectar
+          </button>
+        </div>
+      )}
+
       {/* Backdrop oscuro para móvil cuando el sidebar está abierto */}
       {isMobileSidebarOpen && (
         <div
           onClick={() => setIsMobileSidebarOpen(false)}
-          className="fixed inset-0 bg-brand-navy/30 backdrop-blur-xs z-25 md:hidden"
+          className={`fixed inset-0 bg-brand-navy/30 backdrop-blur-xs z-25 md:hidden ${isLocalMode ? "top-8" : "top-0"}`}
         />
       )}
 
@@ -288,10 +364,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Navbar onOpenSidebar={() => setIsMobileSidebarOpen(true)} />
 
         {/* Área de contenido de la página */}
-        <main className="flex-1 pt-16 flex flex-col">
+        <main className={`flex-1 ${isLocalMode ? "pt-24" : "pt-16"} flex flex-col transition-all duration-300`}>
           {children}
         </main>
       </div>
+
+      {/* Modal rojo de conexión interrumpida */}
+      {showConnectionError && (
+        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-red-50 border-2 border-red-600 rounded-xs p-6 max-w-md w-full space-y-4 shadow-2xl animate-in fade-in zoom-in duration-250">
+            <div className="flex items-center gap-3 bg-transparent text-red-600">
+              <svg className="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h3 className="text-sm font-bold uppercase tracking-wide">
+                Conexión interrumpida con el servidor
+              </h3>
+            </div>
+            <p className="text-xs text-red-800 leading-relaxed font-medium">
+              Se ha perdido la comunicación con la base de datos de Supabase. Por favor, comprueba tu conexión a internet o reintenta. Si el problema persiste, puedes continuar visualizando el sitio en modo local.
+            </p>
+            <div className="flex gap-3 justify-end pt-2 bg-transparent">
+              <button
+                onClick={() => {
+                  localStorage.setItem("family_album_local_mode_active", "true");
+                  window.dispatchEvent(new CustomEvent("local-mode-changed"));
+                  window.dispatchEvent(new CustomEvent("photo-moved"));
+                  setShowConnectionError(false);
+                }}
+                className="px-4 py-2 border border-red-300 hover:bg-red-100 text-red-850 rounded-xs text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors"
+              >
+                Ver en modo local
+              </button>
+              <button
+                onClick={() => {
+                  window.location.reload();
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xs text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-colors shadow-sm"
+              >
+                Reintentar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
