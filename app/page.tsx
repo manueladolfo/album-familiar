@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { filterPhotos, PhotoMetadata, PhotoItem } from "@/lib/search";
+import { isValidUUID } from "@/lib/uuid";
 
 interface SamplePhoto {
   id: string;
@@ -151,6 +152,7 @@ export default function Home() {
   const searchQuery = searchParams.get("search") || "";
   const [statusMessage, setStatusMessage] = useState("Conectando con Supabase...");
   const [importedPhotos, setImportedPhotos] = useState<string[]>([]);
+  const [libraryPhotos, setLibraryPhotos] = useState<PhotoItem[]>([]);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Estados de Colecciones & Música
@@ -173,6 +175,8 @@ export default function Home() {
   const [newPersonName, setNewPersonName] = useState<string>("");
   const [selectedPhotoNamesForNewPerson, setSelectedPhotoNamesForNewPerson] = useState<string[]>([]);
   const [newPersonIsGroup, setNewPersonIsGroup] = useState<boolean>(false);
+
+  const currentCarouselPhotos = libraryPhotos.length > 0 ? libraryPhotos : SAMPLE_PHOTOS;
 
   // Inicialización de música, personas e importados
   useEffect(() => {
@@ -216,11 +220,107 @@ export default function Home() {
       setTaggedPhotos(initialTags);
     }
 
-    // 4. Cargar fotos importadas y metadatos de IA
-    const loadImportedAndMetadata = () => {
-      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-      const localPhotos = JSON.parse(localPhotosJson);
-      setImportedPhotos(localPhotos.map((p: LocalPhotoItem) => p.name));
+    // 4. Cargar fotos importadas, remotas y metadatos de IA
+    const loadImportedAndMetadata = async () => {
+      try {
+        let remotePhotos: PhotoItem[] = [];
+
+        // 1. Obtener de Supabase Storage
+        try {
+          const { data: storageData, error } = await supabase.storage
+            .from("family-album")
+            .list("thumbnails", {
+              limit: 100,
+              sortBy: { column: "created_at", order: "desc" },
+            });
+
+          if (error) throw error;
+
+          if (storageData) {
+            const validFiles = storageData.filter((file) => file.name !== ".emptyFolderPlaceholder");
+
+            let dbAlbumMappings: Record<string, string> = {};
+            let dbStatusMappings: Record<string, string> = {};
+            try {
+              const { data: dbPhotos } = await supabase.from("photos").select("id, album_id, status");
+              if (dbPhotos) {
+                dbPhotos.forEach((p) => {
+                  if (p.album_id) dbAlbumMappings[p.id] = p.album_id;
+                  if (p.status) dbStatusMappings[p.id] = p.status;
+                });
+              }
+            } catch {
+              // Ignorar
+            }
+
+            const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+            const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
+
+            const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+            const localStatusMappings = JSON.parse(localStatusMappingsJson);
+
+            const combinedAlbumMappings = { ...dbAlbumMappings, ...localAlbumMappings };
+            const combinedStatusMappings = { ...dbStatusMappings, ...localStatusMappings };
+
+            remotePhotos = validFiles.map((file) => {
+              const { data: urlData } = supabase.storage
+                .from("family-album")
+                .getPublicUrl(`thumbnails/${file.name}`);
+
+              const albumId = combinedAlbumMappings[file.name] || null;
+              const status = combinedStatusMappings[file.name] || null;
+
+              return {
+                name: file.name,
+                url: urlData.publicUrl,
+                created_at: file.created_at,
+                album_id: albumId,
+                status: status,
+              };
+            });
+          }
+        } catch (err) {
+          console.warn("Fallo al conectar con Supabase Storage en inicio. Operando localmente...");
+        }
+
+        // 2. Obtener locales de LocalStorage
+        const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
+        const localPhotos: PhotoItem[] = JSON.parse(localPhotosJson);
+
+        const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+        const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
+
+        const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+        const localStatusMappings = JSON.parse(localStatusMappingsJson);
+
+        const updatedLocalPhotos = localPhotos.map((photo) => ({
+          ...photo,
+          album_id: localAlbumMappings[photo.name] !== undefined ? localAlbumMappings[photo.name] : photo.album_id,
+          status: localStatusMappings[photo.name] !== undefined ? localStatusMappings[photo.name] : photo.status,
+        }));
+
+        // 3. Combinar
+        const allPhotos = [...remotePhotos];
+        updatedLocalPhotos.forEach((localPhoto) => {
+          if (!allPhotos.some((p) => p.name === localPhoto.name)) {
+            allPhotos.push(localPhoto);
+          }
+        });
+
+        // 4. Filtrar activas
+        const activePhotos = allPhotos
+          .filter((photo) => photo.status !== "trash")
+          .sort((a, b) => {
+            const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return dateB - dateA;
+          });
+
+        setLibraryPhotos(activePhotos);
+        setImportedPhotos(activePhotos.map((p) => p.name));
+      } catch (err) {
+        console.error("Error al cargar fotos de la biblioteca:", err);
+      }
 
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
@@ -254,11 +354,12 @@ export default function Home() {
 
   // Rotación automática del carrusel cada 6 segundos
   useEffect(() => {
+    if (currentCarouselPhotos.length === 0) return;
     const timer = setInterval(() => {
-      setActiveCollectionIndex((prev) => (prev + 1) % SAMPLE_PHOTOS.length);
+      setActiveCollectionIndex((prev) => (prev + 1) % currentCarouselPhotos.length);
     }, 6000);
     return () => clearInterval(timer);
-  }, []);
+  }, [currentCarouselPhotos.length]);
 
   // Cargar fotos asociadas al perfil de persona seleccionado y buscar sugerencias
   useEffect(() => {
@@ -438,6 +539,29 @@ export default function Home() {
     }
   };
 
+  // Mover foto a papelera desde Inicio
+  const moveToTrashFromHome = async (photoName: string) => {
+    try {
+      if (isValidUUID(photoName)) {
+        const { error } = await supabase
+          .from("photos")
+          .update({ status: "trash" })
+          .eq("id", photoName);
+        if (error) throw error;
+      }
+    } catch {
+      console.warn("Fallo al mover a la papelera en Supabase (RLS). Guardando localmente...");
+    } finally {
+      const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
+      const localStatusMappings = JSON.parse(localStatusMappingsJson);
+      localStatusMappings[photoName] = "trash";
+      localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
+
+      window.dispatchEvent(new CustomEvent("photo-moved"));
+      setFeedback({ type: "success", text: "Foto movida a la papelera." });
+    }
+  };
+
   const groups = people.filter((p) => p.isGroup);
   const individuals = people.filter((p) => !p.isGroup);
 
@@ -486,19 +610,19 @@ export default function Home() {
 
       {/* SECCIÓN 1: COLECCIONES CON MÚSICA */}
       <div className="space-y-4 bg-transparent">
-        <div className="flex justify-between items-center bg-transparent">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-transparent">
           <div className="space-y-0.5 bg-transparent">
             <h3 className="text-lg font-medium text-brand-navy tracking-tight">Colecciones de Recuerdos</h3>
             <p className="text-xs text-brand-navy/55">Disfruta de tus fotografías familiares ambientadas con melodías relajantes.</p>
           </div>
 
           {/* Reproductor de Spotify Premium Estilo Glassmorphism */}
-          <div className="w-full max-w-[420px] h-[80px] bg-transparent rounded-xs overflow-hidden border border-brand-navy/15 shadow-sm">
+          <div className="w-full sm:w-auto sm:min-w-[360px] md:min-w-[420px] h-[82px] bg-transparent rounded-xs overflow-hidden border border-brand-navy/15 shadow-sm flex-shrink-0">
             <iframe
               style={{ borderRadius: "8px" }}
               src="https://open.spotify.com/embed/playlist/37i9dQZF1DWWQRwui0ExPn?utm_source=generator&theme=0"
               width="100%"
-              height="80"
+              height="100%"
               frameBorder="0"
               allowFullScreen={false}
               allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
@@ -513,18 +637,24 @@ export default function Home() {
           className="relative aspect-[16/9] w-full max-h-[420px] bg-brand-navy/5 rounded-xs overflow-hidden border border-brand-navy/10 group shadow-md cursor-zoom-in"
           title="Haga clic para ver en pantalla completa"
         >
-          {SAMPLE_PHOTOS.map((photo, index) => {
+          {currentCarouselPhotos.map((photo, index) => {
             const isActive = index === activeCollectionIndex;
+            const photoId = (photo as any).id || photo.name;
+            const photoTitle = (photo as any).title || photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "") || photo.name;
+            const photoDate = (photo as any).created_at || (photo as any).createdAt || "";
+            const photoYear = photoDate ? photoDate.split("-")[0] : "";
+            const suggestedPersonName = photo.name.includes("playa") || photo.name.includes("bicicleta") ? "Ana Paula" : "Manuel Adolfo";
+
             return (
               <div
-                key={photo.id}
+                key={photoId}
                 className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
                   isActive ? "opacity-100 z-10 scale-100" : "opacity-0 z-0 scale-[1.01]"
                 }`}
               >
                 <img
                   src={photo.url}
-                  alt={photo.title}
+                  alt={photoTitle}
                   className="w-full h-full object-cover transition-transform duration-300"
                   style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                 />
@@ -533,14 +663,16 @@ export default function Home() {
                 <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/90 via-transparent to-transparent flex flex-col justify-end p-6 md:p-8" />
                 
                 <div className="absolute bottom-6 left-6 md:bottom-8 md:left-8 z-20 text-brand-cream space-y-1 bg-transparent">
-                  <span className="bg-brand-timber text-brand-cream text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-xs">
-                    {photo.createdAt.split("-")[0]}
-                  </span>
+                  {photoYear && (
+                    <span className="bg-brand-timber text-brand-cream text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-xs">
+                      {photoYear}
+                    </span>
+                  )}
                   <h4 className="text-sm md:text-lg font-light tracking-wide uppercase mt-1">
-                    {photo.title}
+                    {photoTitle}
                   </h4>
                   <p className="text-[10px] md:text-xs text-brand-cream/75 bg-transparent font-medium">
-                    Sugerido hoy en: Personas &gt; {SAMPLE_PHOTOS[index].id.includes("playa") ? "Ana Paula" : "Manuel Adolfo"}
+                    Sugerido hoy en: Personas &gt; {suggestedPersonName}
                   </p>
                 </div>
               </div>
@@ -551,7 +683,7 @@ export default function Home() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setActiveCollectionIndex((prev) => (prev - 1 + SAMPLE_PHOTOS.length) % SAMPLE_PHOTOS.length);
+              setActiveCollectionIndex((prev) => (prev - 1 + currentCarouselPhotos.length) % currentCarouselPhotos.length);
             }}
             className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-brand-cream/80 backdrop-blur-xs text-brand-navy border border-brand-navy/15 rounded-xs hover:bg-brand-cream transition-all z-20 cursor-pointer opacity-0 group-hover:opacity-100"
           >
@@ -560,7 +692,7 @@ export default function Home() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setActiveCollectionIndex((prev) => (prev + 1) % SAMPLE_PHOTOS.length);
+              setActiveCollectionIndex((prev) => (prev + 1) % currentCarouselPhotos.length);
             }}
             className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-brand-cream/80 backdrop-blur-xs text-brand-navy border border-brand-navy/15 rounded-xs hover:bg-brand-cream transition-all z-20 cursor-pointer opacity-0 group-hover:opacity-100"
           >
@@ -694,10 +826,149 @@ export default function Home() {
       <div className="space-y-6 bg-transparent pt-6 border-t border-brand-navy/10">
         <div className="space-y-1 bg-transparent">
           <h3 className="text-lg font-medium text-brand-navy tracking-tight">Catálogo de Recuerdos</h3>
-          <p className="text-xs text-brand-navy/50">Selecciona e importa imágenes específicas del catálogo a tu biblioteca del álbum.</p>
+          <p className="text-xs text-brand-navy/50">
+            {libraryPhotos.length > 0
+              ? "Explora, visualiza y gestiona las fotografías activas de tu biblioteca."
+              : "Selecciona e importa imágenes específicas del catálogo a tu biblioteca del álbum."}
+          </p>
         </div>
 
         {(() => {
+          if (libraryPhotos.length > 0) {
+            const filteredPhotos = filterPhotos(
+              libraryPhotos,
+              searchQuery,
+              albums,
+              people,
+              taggedPhotos,
+              photoMetadata
+            );
+
+            if (filteredPhotos.length === 0) {
+              return (
+                <div className="text-center py-20 bg-brand-cream/40 border border-brand-navy/10 rounded-xs">
+                  <svg className="w-12 h-12 mx-auto text-brand-navy/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <p className="mt-4 text-xs text-brand-navy/50">No se encontraron recuerdos que coincidan con tu búsqueda.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {filteredPhotos.map((photo) => {
+                  const year = photo.created_at ? new Date(photo.created_at).getFullYear().toString() : "";
+                  const cleanName = photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "");
+                  const photoTitle = (photoMetadata[photo.name] as any)?.title || cleanName || photo.name;
+                  const albumName = albums.find((a) => a.id === photo.album_id)?.name;
+                  const carouselIndex = libraryPhotos.findIndex((p) => p.name === photo.name);
+
+                  return (
+                    <div
+                      key={photo.name}
+                      className="group border border-brand-navy/10 bg-brand-cream/50 rounded-xs overflow-hidden hover:border-brand-navy/30 transition-all duration-300 flex flex-col justify-between"
+                    >
+                      <div className="aspect-video relative overflow-hidden bg-brand-navy/5">
+                        <img
+                          src={photo.url}
+                          alt={photoTitle}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-102"
+                          style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
+                          loading="lazy"
+                        />
+                        {year && (
+                          <div className="absolute top-3 right-3 bg-brand-cream/90 backdrop-blur-xs text-brand-navy text-[10px] font-semibold px-2 py-0.5 rounded-xs">
+                            {year}
+                          </div>
+                        )}
+
+                        {/* Hover overlay translúcido con desenfoque de cristal (sin nombre) */}
+                        <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
+                          <div className="flex justify-end gap-1.5 bg-transparent">
+                            {/* Botón Ver en Pantalla Completa */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (carouselIndex !== -1) {
+                                  setActiveCollectionIndex(carouselIndex);
+                                  setIsFullscreenCarousel(true);
+                                }
+                              }}
+                              className="p-2 border border-brand-cream/20 hover:bg-brand-cream/10 text-brand-cream rounded-xs transition-all cursor-pointer"
+                              title="Ver en pantalla completa"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m-11.25 11.25v-4.5m0 4.5h4.5m-4.5 0L9 15m11.25 5.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
+                              </svg>
+                            </button>
+
+                            {/* Botón Mover a Papelera */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveToTrashFromHome(photo.name);
+                              }}
+                              className="p-2 border border-red-400/40 hover:bg-red-500/20 text-red-400 rounded-xs transition-all cursor-pointer"
+                              title="Mover a la papelera"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          <div className="bg-transparent text-left space-y-0.5">
+                            <p className="text-brand-cream/70 text-[9px]">
+                              {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
+                            </p>
+                            {photoMetadata[photo.name]?.location && (
+                              <p className="text-[9px] text-brand-cream/80 truncate flex items-center gap-1">
+                                📍 {photoMetadata[photo.name].location}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-4 space-y-4 flex-1 flex flex-col justify-between bg-transparent">
+                        <div className="space-y-1 bg-transparent text-left">
+                          <h4 className="text-xs font-semibold text-brand-navy/90 tracking-wide uppercase truncate">
+                            {photoTitle}
+                          </h4>
+                          <p className="text-[11px] text-brand-navy/50 capitalize bg-transparent">
+                            Álbum: <span className="font-medium text-brand-timber">{albumName || "Sin álbum"}</span>
+                          </p>
+                        </div>
+
+                        <div className="flex gap-2 bg-transparent">
+                          <button
+                            onClick={() => {
+                              if (carouselIndex !== -1) {
+                                setActiveCollectionIndex(carouselIndex);
+                                setIsFullscreenCarousel(true);
+                              }
+                            }}
+                            className="flex-1 py-1.5 text-[11px] font-semibold rounded-xs border border-brand-navy text-brand-navy hover:bg-brand-navy hover:text-brand-cream text-center transition-all cursor-pointer"
+                          >
+                            Ver en Pantalla Completa
+                          </button>
+                          <button
+                            onClick={() => moveToTrashFromHome(photo.name)}
+                            className="py-1.5 px-3 text-[11px] font-semibold rounded-xs border border-red-400 hover:bg-red-500 hover:text-brand-cream text-red-500 text-center transition-all cursor-pointer"
+                          >
+                            Borrar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }
+
+          // Fallback al catálogo de ejemplos si no hay fotos
           const photoItems: PhotoItem[] = SAMPLE_PHOTOS.map((p) => ({
             name: p.name,
             url: p.url,
@@ -755,7 +1026,7 @@ export default function Home() {
                     </div>
 
                     <div className="p-4 space-y-4 flex-1 flex flex-col justify-between bg-transparent">
-                      <div className="space-y-1 bg-transparent">
+                      <div className="space-y-1 bg-transparent text-left">
                         <h4 className="text-xs font-semibold text-brand-navy/90 tracking-wide uppercase">
                           {photo.title}
                         </h4>
@@ -1199,32 +1470,39 @@ export default function Home() {
             
             {/* Foto principal */}
             <div className="relative w-full h-full max-w-[92vw] flex items-center justify-center bg-transparent">
-              {SAMPLE_PHOTOS.map((photo, index) => {
+              {currentCarouselPhotos.map((photo, index) => {
                 const isActive = index === activeCollectionIndex;
+                const photoId = (photo as any).id || photo.name;
+                const photoTitle = (photo as any).title || photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "") || photo.name;
+                const photoDate = (photo as any).created_at || (photo as any).createdAt || "";
+                const photoYear = photoDate ? photoDate.split("-")[0] : "";
+
                 return (
                   <div
-                    key={photo.id}
+                    key={photoId}
                     className={`absolute inset-0 flex flex-col items-center justify-center transition-opacity duration-1000 ease-in-out ${
                       isActive ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
                     }`}
                   >
                     {/* Contenedor responsivo que optimiza visualización según la orientación */}
-                    <div className="relative max-w-full max-h-[70vh] md:max-h-[75vh] landscape:max-h-[62vh] landscape:md:max-h-[72vh] flex items-center justify-center overflow-hidden rounded-xs border border-brand-cream/10 shadow-2xl">
+                    <div className="relative max-w-full max-h-[50vh] sm:max-h-[70vh] md:max-h-[75vh] landscape:max-h-[50vh] landscape:md:max-h-[72vh] flex items-center justify-center overflow-hidden rounded-xs border border-brand-cream/10 shadow-2xl bg-black/10">
                       <img
                         src={photo.url}
-                        alt={photo.title}
-                        className="object-contain w-auto h-auto max-w-full max-h-[70vh] md:max-h-[75vh] landscape:max-h-[62vh] landscape:md:max-h-[72vh] transition-transform duration-300"
+                        alt={photoTitle}
+                        className="object-contain w-auto h-auto max-w-full max-h-[50vh] sm:max-h-[70vh] md:max-h-[75vh] landscape:max-h-[50vh] landscape:md:max-h-[72vh] transition-transform duration-300"
                         style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                         onClick={(e) => e.stopPropagation()}
                       />
                       
-                      {/* Título superpuesto (se atenúa en móvil landscape) */}
+                      {/* Título superpuesto */}
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand-navy/90 to-transparent p-4 text-left text-brand-cream flex flex-col gap-0.5 pointer-events-none">
-                        <span className="bg-brand-timber text-brand-cream text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-xs w-max">
-                          {photo.createdAt.split("-")[0]}
-                        </span>
+                        {photoYear && (
+                          <span className="bg-brand-timber text-brand-cream text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-xs w-max">
+                            {photoYear}
+                          </span>
+                        )}
                         <h4 className="text-xs md:text-sm font-semibold uppercase tracking-wide mt-1">
-                          {photo.title}
+                          {photoTitle}
                         </h4>
                       </div>
                     </div>
@@ -1237,7 +1515,7 @@ export default function Home() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setActiveCollectionIndex((prev) => (prev - 1 + SAMPLE_PHOTOS.length) % SAMPLE_PHOTOS.length);
+                setActiveCollectionIndex((prev) => (prev - 1 + currentCarouselPhotos.length) % currentCarouselPhotos.length);
               }}
               className="absolute left-2 md:left-4 p-3 bg-brand-cream/10 border border-brand-cream/20 text-brand-cream hover:bg-brand-cream hover:text-brand-navy rounded-xs transition-all z-20 cursor-pointer text-sm font-bold focus:outline-none"
             >
@@ -1246,7 +1524,7 @@ export default function Home() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setActiveCollectionIndex((prev) => (prev + 1) % SAMPLE_PHOTOS.length);
+                setActiveCollectionIndex((prev) => (prev + 1) % currentCarouselPhotos.length);
               }}
               className="absolute right-2 md:right-4 p-3 bg-brand-cream/10 border border-brand-cream/20 text-brand-cream hover:bg-brand-cream hover:text-brand-navy rounded-xs transition-all z-20 cursor-pointer text-sm font-bold focus:outline-none"
             >
@@ -1257,14 +1535,14 @@ export default function Home() {
 
           {/* Floating Spotify Player en la base */}
           <div
-            className="w-full max-w-[420px] mx-auto bg-transparent rounded-xs overflow-hidden border border-brand-cream/15 shadow-xl z-10"
+            className="w-full max-w-[420px] mx-auto h-[82px] bg-transparent rounded-xs overflow-hidden border border-brand-cream/15 shadow-xl z-10 flex-shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
             <iframe
               style={{ borderRadius: "8px" }}
               src="https://open.spotify.com/embed/playlist/37i9dQZF1DWWQRwui0ExPn?utm_source=generator&theme=0"
               width="100%"
-              height="80"
+              height="100%"
               frameBorder="0"
               allowFullScreen={false}
               allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
