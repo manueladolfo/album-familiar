@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
+import { supabase } from "@/lib/supabase";
 
 interface AlbumItem {
   id: string;
@@ -25,19 +26,49 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    // Comprobar si hay sesión iniciada en LocalStorage o SessionStorage
-    const isLoggedIn =
-      localStorage.getItem("family_album_session") === "active" ||
-      sessionStorage.getItem("family_album_session") === "active";
-    
-    if (!isLoggedIn && pathname !== "/login") {
-      router.push("/login");
-    } else if (isLoggedIn && pathname === "/login") {
-      router.push("/");
-    } else {
-      setAuthorized(true);
-    }
-    setLoading(false);
+    let mounted = true;
+
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+
+        if (!session && pathname !== "/login") {
+          router.push("/login");
+        } else if (session && pathname === "/login") {
+          router.push("/");
+        } else {
+          setAuthorized(true);
+        }
+      } catch (err) {
+        console.error("Error al obtener la sesión de Supabase:", err);
+        if (pathname !== "/login") {
+          router.push("/login");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    checkSession();
+
+    // Escuchar cambios de estado de autenticación (login, logout, token expirado)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+
+      if (!session && pathname !== "/login") {
+        setAuthorized(false);
+        router.push("/login");
+      } else if (session && pathname === "/login") {
+        router.push("/");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [pathname, router]);
 
   // Cerrar sidebar al cambiar de ruta

@@ -4,10 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const VALID_USERS = [
-  { email: "admin@albumfamiliar.com", password: "secreto123" },
-  { email: "familiar@albumfamiliar.com", password: "recuerdo456" }
-];
+
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,63 +39,20 @@ export default function LoginPage() {
       setLoading(true);
       setErrorMsg(null);
 
-      // 1. Validar si es un usuario local por defecto o si las credenciales de Supabase son simuladas
-      const isDefaultLocalUser = VALID_USERS.some(
-        (u) => u.email === email.trim() && u.password === password.trim()
-      );
+      // Iniciar sesión directamente en Supabase Auth
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
 
-      const isRealSupabase = supabase && 
-        process.env.NEXT_PUBLIC_SUPABASE_URL && 
-        !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder") &&
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY && 
-        !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.startsWith("sb_publishable");
+      if (error) throw error;
+      
+      console.log("Sesión iniciada con éxito en Supabase:", data);
 
-      let sessionStarted = false;
-
-      if (isDefaultLocalUser) {
-        console.log("Inicio de sesión local detectado para usuario predefinido. Saltando Supabase Auth.");
-      } else if (isRealSupabase) {
-        try {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password: password.trim(),
-          });
-
-          if (error) throw error;
-          
-          console.log("Sesión iniciada con éxito en Supabase:", data);
-          sessionStarted = true;
-        } catch (err: any) {
-          console.info("Fallo en Supabase Auth, intentando autenticación local de prueba:", err.message);
-        }
-      } else {
-        console.info("Supabase no está completamente configurado con credenciales reales. Usando autenticación local de prueba.");
-      }
-
-      // Fallback local si no se inició sesión en Supabase
-      if (!sessionStarted) {
-        const isValidLocalUser = isDefaultLocalUser || VALID_USERS.some(
-          (u) => u.email === email.trim() && u.password === password.trim()
-        );
-        
-        const isFlexibleUser = email.includes("@") && password.length >= 6;
-
-        if (!isValidLocalUser && !isFlexibleUser) {
-          throw new Error("Credenciales inválidas. Usa admin@albumfamiliar.com o familiar@albumfamiliar.com para el modo local.");
-        }
-        
-        console.log("Sesión activa en modo local.");
-      }
-
-      // 2. Establecer sesión
-      if (keepConnected) {
-        localStorage.setItem("family_album_session", "active");
-      } else {
-        sessionStorage.setItem("family_album_session", "active");
-      }
+      // Guardar el email del usuario logueado en LocalStorage
       localStorage.setItem("family_album_user_email", email.trim());
 
-      // 3. Redirigir al Dashboard
+      // Redirigir al Dashboard
       router.push("/");
       
       // Forzar al wrapper a recargar el layout
@@ -174,7 +128,7 @@ export default function LoginPage() {
             <p className="text-[10px] text-brand-navy/55 bg-transparent leading-relaxed">
               {isRecovering 
                 ? "Introduce tu email para enviarte un enlace de restauración de contraseña." 
-                : "Usa tus credenciales o accede con admin@albumfamiliar.com (secreto123) / familiar@albumfamiliar.com (recuerdo456)"
+                : "Usa tus credenciales familiares registradas para acceder al álbum."
               }
             </p>
           </div>
