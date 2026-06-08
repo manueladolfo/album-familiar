@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, isUserAdmin } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 import exifr from "exifr";
@@ -26,6 +26,17 @@ export default function PhotosPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<{ url: string; name: string } | null>(null);
   const [rotations, setRotations] = useState<Record<string, number>>({});
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkAdmin = () => {
+      const email = localStorage.getItem("family_album_user_email");
+      setIsAdmin(isUserAdmin(email));
+    };
+    checkAdmin();
+    window.addEventListener("photo-moved", checkAdmin);
+    return () => window.removeEventListener("photo-moved", checkAdmin);
+  }, []);
 
   // Estados para Búsqueda Inteligente e IA
   const [people, setPeople] = useState<PersonProfile[]>([]);
@@ -601,68 +612,70 @@ export default function PhotosPage() {
   return (
     <div className="flex-1 p-4 md:p-8 space-y-6 md:space-y-8 bg-brand-cream overflow-y-auto">
       {/* Cargador de Imágenes */}
-      <div className="max-w-4xl mx-auto bg-transparent">
-        <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`border border-dashed p-6 md:p-10 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-4 rounded-xs ${
-            isDragOver
-              ? "border-brand-navy bg-brand-sage/15"
-              : "border-brand-navy/20 hover:border-brand-navy/55 bg-brand-cream/40"
-          }`}
-        >
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={(e) => handleUpload(e.target.files)}
-            className="hidden"
-            accept="image/*"
-            multiple
-          />
-
-          <div className="w-12 h-12 border border-brand-navy/35 text-brand-navy rounded-full flex items-center justify-center bg-transparent">
-            {uploading ? (
-              <svg className="animate-spin h-5 w-5 text-brand-navy" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5 text-brand-navy" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-            )}
-          </div>
-
-          <div className="space-y-1 bg-transparent">
-            <p className="text-sm font-medium text-brand-navy bg-transparent">
-              {uploading ? "Procesando y subiendo imagen..." : "Sube tu foto familiar"}
-            </p>
-            <p className="text-xs text-brand-navy/50 bg-transparent">
-              Arrastra y suelta tu foto aquí, o haz clic para buscar en tu dispositivo
-            </p>
-          </div>
-        </div>
-
-        {/* Notificación de Estado */}
-        {uploadStatus && (
+      {isAdmin && (
+        <div className="max-w-4xl mx-auto bg-transparent">
           <div
-            className={`mt-4 p-3 rounded-xs border text-xs flex items-center gap-3 bg-brand-cream/80 ${
-              uploadStatus.type === "success"
-                ? "border-green-200 text-green-800"
-                : "border-red-200 text-red-800"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border border-dashed p-6 md:p-10 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-4 rounded-xs ${
+              isDragOver
+                ? "border-brand-navy bg-brand-sage/15"
+                : "border-brand-navy/20 hover:border-brand-navy/55 bg-brand-cream/40"
             }`}
           >
-            <span className="flex-1 font-medium">{uploadStatus.message}</span>
-            <button onClick={() => setUploadStatus(null)} className="text-brand-navy/40 hover:text-brand-navy/70">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={(e) => handleUpload(e.target.files)}
+              className="hidden"
+              accept="image/*"
+              multiple
+            />
+
+            <div className="w-12 h-12 border border-brand-navy/35 text-brand-navy rounded-full flex items-center justify-center bg-transparent">
+              {uploading ? (
+                <svg className="animate-spin h-5 w-5 text-brand-navy" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-brand-navy" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              )}
+            </div>
+
+            <div className="space-y-1 bg-transparent">
+              <p className="text-sm font-medium text-brand-navy bg-transparent">
+                {uploading ? "Procesando y subiendo imagen..." : "Sube tu foto familiar"}
+              </p>
+              <p className="text-xs text-brand-navy/50 bg-transparent">
+                Arrastra y suelta tu foto aquí, o haz clic para buscar en tu dispositivo
+              </p>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Notificación de Estado */}
+          {uploadStatus && (
+            <div
+              className={`mt-4 p-3 rounded-xs border text-xs flex items-center gap-3 bg-brand-cream/80 ${
+                uploadStatus.type === "success"
+                  ? "border-green-200 text-green-800"
+                  : "border-red-200 text-red-800"
+              }`}
+            >
+              <span className="flex-1 font-medium">{uploadStatus.message}</span>
+              <button onClick={() => setUploadStatus(null)} className="text-brand-navy/40 hover:text-brand-navy/70">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Cuadrícula de fotos */}
       <div className="max-w-6xl mx-auto space-y-4">

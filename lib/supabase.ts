@@ -8,3 +8,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export const ADMIN_EMAILS = [
+  "manueliphone09@gmail.com",
+  "pau@albumfamiliar.com",
+  "manu@albumfamiliar.com",
+  "mama@albumfamiliar.com"
+];
+
+export function isUserAdmin(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
