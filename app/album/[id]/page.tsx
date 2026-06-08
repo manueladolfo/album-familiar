@@ -370,15 +370,14 @@ export default function AlbumPage({ params }: PageProps) {
       setUploadStatus(null);
 
       let successCount = 0;
-      let errorCount = 0;
-      let lastErrorDetails = "";
+      const failedFiles: { name: string; reason: string }[] = [];
       const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (!file.type.startsWith("image/")) {
           console.warn("Archivo omitido porque no es una imagen:", file.name);
-          errorCount++;
+          failedFiles.push({ name: file.name, reason: "No es una imagen" });
           continue;
         }
 
@@ -467,8 +466,8 @@ export default function AlbumPage({ params }: PageProps) {
             triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude);
           } catch (err: any) {
             console.error("Fallo al subir a Supabase en modo online:", err);
-            errorCount++;
-            lastErrorDetails = err?.message || String(err);
+            const reason = err?.message || String(err);
+            failedFiles.push({ name: file.name, reason });
             break;
           }
         } else {
@@ -502,24 +501,28 @@ export default function AlbumPage({ params }: PageProps) {
 
             successCount++;
             triggerAIEvaluation(localThumbnailName, base64Image, latitude, longitude);
-          } catch (fallbackErr) {
+          } catch (fallbackErr: any) {
             console.error("Fallo al guardar en LocalStorage:", fallbackErr);
-            errorCount++;
+            failedFiles.push({ name: file.name, reason: fallbackErr?.message || "Error de almacenamiento local" });
           }
         }
       }
 
       await fetchAlbumData();
 
-      if (errorCount === 0) {
+      if (failedFiles.length === 0) {
         setUploadStatus({
           type: "success",
           message: `¡Se subieron y optimizaron con éxito ${successCount} fotos en este álbum!`,
         });
       } else {
+        const fileList = failedFiles.length <= 5
+          ? failedFiles.map(f => `"${f.name}" (${f.reason})`).join(", ")
+          : failedFiles.slice(0, 5).map(f => `"${f.name}" (${f.reason})`).join(", ") + ` ...y ${failedFiles.length - 5} más`;
+        const successMsg = successCount > 0 ? `${successCount} subidas con éxito. ` : "";
         setUploadStatus({
           type: "error",
-          message: `Subida fallida: ${lastErrorDetails || "Fallo en la base de datos de Supabase."}`,
+          message: `${successMsg}Fallaron ${failedFiles.length}: ${fileList}`,
         });
       }
 
