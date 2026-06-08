@@ -304,7 +304,7 @@ export default function PhotosPage() {
 
           let width = img.width;
           let height = img.height;
-          const maxDim = 500;
+          const maxDim = 1200;
 
           if (width > height) {
             if (width > maxDim) {
@@ -331,7 +331,7 @@ export default function PhotosPage() {
               }
             },
             "image/webp",
-            0.85
+            0.90
           );
         };
       };

@@ -253,7 +253,7 @@ export default function AlbumPage({ params }: PageProps) {
 
           let width = img.width;
           let height = img.height;
-          const maxDim = 500;
+          const maxDim = 1200;
 
           if (width > height) {
             if (width > maxDim) {
@@ -280,7 +280,7 @@ export default function AlbumPage({ params }: PageProps) {
               }
             },
             "image/webp",
-            0.85
+            0.90
           );
         };
       };
