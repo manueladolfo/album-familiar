@@ -372,18 +372,17 @@ export default function Home() {
   // Cargar fotos asociadas al perfil de persona seleccionado y buscar sugerencias
   useEffect(() => {
     if (selectedPerson) {
-      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-      const localPhotos = JSON.parse(localPhotosJson);
-      const activeLocalPhotos: LocalPhotoItem[] = localPhotos.filter((p: LocalPhotoItem) => p.status !== "trash");
-
       // Fotos ya asociadas
       const assignedNames = taggedPhotos[selectedPerson.id] || [];
-      const assigned = activeLocalPhotos.filter((p: LocalPhotoItem) => assignedNames.includes(p.name));
+      const assigned = libraryPhotos.filter((p) => assignedNames.includes(p.name));
 
       // Buscar sugerencias (fotos no asignadas pero que tienen tags en común con el perfil)
-      const unassigned = activeLocalPhotos.filter((p: LocalPhotoItem) => !assignedNames.includes(p.name));
-      const suggestions = unassigned.filter((p: LocalPhotoItem) => {
-        const titleLower = (p.title || p.name).toLowerCase();
+      const unassigned = libraryPhotos.filter((p) => !assignedNames.includes(p.name));
+      const suggestions = unassigned.filter((p) => {
+        const meta = photoMetadata[p.name];
+        const tagsString = meta?.tags ? meta.tags.join(" ") : "";
+        const locationString = meta?.location || "";
+        const titleLower = `${tagsString} ${locationString} ${p.name}`.toLowerCase();
         // Verificar si contiene alguna palabra clave del perfil
         return selectedPerson.tags.some(tag => titleLower.includes(tag.toLowerCase()));
       });
@@ -391,7 +390,7 @@ export default function Home() {
       setUnassignedPhotos(unassigned);
       setSuggestedPhotos(suggestions);
     }
-  }, [selectedPerson, taggedPhotos]);
+  }, [selectedPerson, taggedPhotos, libraryPhotos, photoMetadata]);
 
   // Añadir una foto seleccionada al perfil de la persona
   const addPhotoToPerson = (photoName: string) => {
@@ -742,7 +741,8 @@ export default function Home() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
             {groups.map((group) => {
-              const count = (taggedPhotos[group.id] || []).length;
+              const assignedNames = taggedPhotos[group.id] || [];
+              const count = libraryPhotos.filter((photo) => assignedNames.includes(photo.name)).length;
               return (
                 <div
                   key={group.id}
@@ -801,7 +801,8 @@ export default function Home() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             {individuals.map((person) => {
-              const count = (taggedPhotos[person.id] || []).length;
+              const assignedNames = taggedPhotos[person.id] || [];
+              const count = libraryPhotos.filter((photo) => assignedNames.includes(photo.name)).length;
               return (
                 <div
                   key={person.id}
@@ -1123,11 +1124,8 @@ export default function Home() {
               <div className="space-y-4 bg-transparent">
                 <h4 className="text-xs font-semibold text-brand-navy/60 uppercase tracking-wider">Recuerdos en el álbum</h4>
                 {(() => {
-                  const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-                  const localPhotos = JSON.parse(localPhotosJson);
-                  const activeLocalPhotos = localPhotos.filter((p: LocalPhotoItem) => p.status !== "trash");
                   const assignedNames = taggedPhotos[selectedPerson.id] || [];
-                  const assigned = activeLocalPhotos.filter((p: LocalPhotoItem) => assignedNames.includes(p.name));
+                  const assigned = libraryPhotos.filter((p) => assignedNames.includes(p.name));
 
                   if (assigned.length === 0) {
                     return (
@@ -1220,11 +1218,8 @@ export default function Home() {
               <div className="space-y-4 bg-transparent pt-4 border-t border-brand-navy/10">
                 <h4 className="text-xs font-semibold text-brand-navy/60 uppercase tracking-wider">Identificar en foto de la biblioteca</h4>
                 {(() => {
-                  const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-                  const localPhotos = JSON.parse(localPhotosJson);
-                  const activeLocalPhotos = localPhotos.filter((p: LocalPhotoItem) => p.status !== "trash");
                   const assignedNames = taggedPhotos[selectedPerson.id] || [];
-                  const manualOptions = activeLocalPhotos.filter((p: LocalPhotoItem) => !assignedNames.includes(p.name));
+                  const manualOptions = libraryPhotos.filter((p) => !assignedNames.includes(p.name));
 
                   if (manualOptions.length === 0) {
                     return (
@@ -1326,11 +1321,7 @@ export default function Home() {
                 </div>
 
                 {(() => {
-                  const localPhotosJson = typeof window !== "undefined" ? localStorage.getItem("family_album_local_photos") || "[]" : "[]";
-                  const localPhotos: LocalPhotoItem[] = JSON.parse(localPhotosJson);
-                  const activeLocalPhotos = localPhotos.filter((p) => p.status !== "trash");
-
-                  if (activeLocalPhotos.length === 0) {
+                  if (libraryPhotos.length === 0) {
                     return (
                       <div className="text-center py-8 border border-dashed border-brand-navy/20 rounded-xs bg-brand-navy/5">
                         <p className="text-xs text-brand-navy/50 italic">
@@ -1342,7 +1333,7 @@ export default function Home() {
 
                   return (
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
-                      {activeLocalPhotos.map((photo) => {
+                      {libraryPhotos.map((photo) => {
                         const isSelected = selectedPhotoNamesForNewPerson.includes(photo.name);
                         const selectIndex = selectedPhotoNamesForNewPerson.indexOf(photo.name);
 
@@ -1421,9 +1412,7 @@ export default function Home() {
                     ? "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop" // Imagen de grupo por defecto
                     : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop"; // Avatar por defecto
                   if (selectedPhotoNamesForNewPerson.length > 0) {
-                    const localPhotosJson = typeof window !== "undefined" ? localStorage.getItem("family_album_local_photos") || "[]" : "[]";
-                    const localPhotos: LocalPhotoItem[] = JSON.parse(localPhotosJson);
-                    const firstPhoto = localPhotos.find((p) => p.name === selectedPhotoNamesForNewPerson[0]);
+                    const firstPhoto = libraryPhotos.find((p) => p.name === selectedPhotoNamesForNewPerson[0]);
                     if (firstPhoto && firstPhoto.url) {
                       avatarUrl = firstPhoto.url;
                     }
