@@ -331,7 +331,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex-1 flex min-h-screen bg-brand-cream relative">
       {/* Barra superior de Modo Local */}
       {isLocalMode && (
-        <div className="fixed top-0 left-0 right-0 h-8 bg-red-600 text-white flex items-center justify-between px-4 sm:px-6 text-[11px] font-semibold z-50 shadow-md">
+        <div className="fixed top-0 left-0 right-0 h-8 bg-red-600 text-white flex items-center justify-between px-4 sm:px-6 text-[11px] font-semibold z-60 shadow-md">
           <div className="flex items-center gap-2 bg-transparent">
             <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
             <span>MODO LOCAL, SIN CONEXIÓN CON EL SERVIDOR</span>
@@ -354,7 +354,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {isMobileSidebarOpen && (
         <div
           onClick={() => setIsMobileSidebarOpen(false)}
-          className={`fixed inset-0 bg-brand-navy/30 backdrop-blur-xs z-25 md:hidden ${isLocalMode ? "top-8" : "top-0"}`}
+          className={`fixed inset-0 bg-brand-navy/30 backdrop-blur-xs z-48 md:hidden ${isLocalMode ? "top-8" : "top-0"}`}
         />
       )}
 
@@ -374,7 +374,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Modal rojo de conexión interrumpida */}
       {showConnectionError && (
-        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm z-60 flex items-center justify-center p-4">
           <div className="bg-red-50 border-2 border-red-600 rounded-xs p-6 max-w-md w-full space-y-4 shadow-2xl animate-in fade-in zoom-in duration-250">
             <div className="flex items-center gap-3 bg-transparent text-red-600">
               <svg className="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

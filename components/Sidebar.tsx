@@ -538,7 +538,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
 
   return (
     <>
-      <aside className={`w-[280px] fixed ${isLocalMode ? 'top-8' : 'top-0'} bottom-0 left-0 bg-brand-cream border-r border-brand-navy/10 flex flex-col z-30 transition-all duration-300 ease-in-out md:translate-x-0 ${
+      <aside className={`w-[280px] fixed ${isLocalMode ? 'top-8' : 'top-0'} bottom-0 left-0 bg-brand-cream border-r border-brand-navy/10 flex flex-col z-50 transition-all duration-300 ease-in-out md:translate-x-0 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
         {/* Header con Logo */}

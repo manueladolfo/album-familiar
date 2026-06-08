@@ -514,7 +514,7 @@ export default function TrashPage() {
 
       {/* Modal de confirmación premium */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-brand-navy/20 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-brand-navy/20 backdrop-blur-xs z-60 flex items-center justify-center p-4">
           <div className="bg-brand-cream border border-brand-navy/30 rounded-xs p-6 max-w-sm w-full space-y-4 shadow-xl animate-in fade-in zoom-in duration-200">
             <h3 className="text-base font-medium text-brand-navy">
               ¿Vaciar la papelera de fotos?

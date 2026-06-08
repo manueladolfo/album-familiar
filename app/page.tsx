@@ -500,6 +500,37 @@ export default function Home() {
     return templates[index];
   };
 
+  // Escuchar el evento para abrir modal de historia de foto (por ejemplo, al hacer click en una notificación)
+  useEffect(() => {
+    const handleOpenPhotoStory = (e: Event) => {
+      const customEvent = e as CustomEvent<{ photoName: string }>;
+      const photo = libraryPhotos.find((p) => p.name === customEvent.detail.photoName);
+      if (photo) {
+        setSelectedDiaryPhoto(photo);
+        setEditingAnecdote(photoStories[photo.name]?.anecdote || "");
+      }
+    };
+
+    window.addEventListener("open-photo-story", handleOpenPhotoStory);
+
+    // Verificar si hay una apertura pendiente al navegar a Inicio
+    if (typeof window !== "undefined") {
+      const pendingPhotoName = localStorage.getItem("family_album_open_story_pending");
+      if (pendingPhotoName && libraryPhotos.length > 0) {
+        const photo = libraryPhotos.find((p) => p.name === pendingPhotoName);
+        if (photo) {
+          setSelectedDiaryPhoto(photo);
+          setEditingAnecdote(photoStories[photo.name]?.anecdote || "");
+        }
+        localStorage.removeItem("family_album_open_story_pending");
+      }
+    }
+
+    return () => {
+      window.removeEventListener("open-photo-story", handleOpenPhotoStory);
+    };
+  }, [libraryPhotos, photoStories]);
+
   // Guardar la anécdota personal y crónica del diario
   const handleSaveStory = (photoName: string, chronicleText: string, anecdoteText: string) => {
     const updatedStories = { ...photoStories };
@@ -516,7 +547,7 @@ export default function Home() {
     const cleanName = photoName.split("_").slice(1).join("_").replace(/\.webp$/, "");
     const photoTitle = (meta as any)?.title || cleanName || "un recuerdo familiar";
     const notifMsg = `✍️ Se narró la historia de "${photoTitle}".`;
-    window.dispatchEvent(new CustomEvent("new-notification", { detail: { message: notifMsg } }));
+    window.dispatchEvent(new CustomEvent("new-notification", { detail: { message: notifMsg, photoName: photoName } }));
   };
 
   // Sembrar todos los ejemplos locales
@@ -1247,7 +1278,7 @@ export default function Home() {
 
       {/* MODAL DETALLES DEL PERFIL DE PERSONA (ÁLBUM INDIVIDUAL) */}
       {selectedPerson && (
-        <div className="fixed inset-0 bg-brand-navy/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-brand-navy/50 backdrop-blur-xs z-60 flex items-center justify-center p-4">
           <div className="bg-brand-cream border border-brand-navy/25 rounded-xs p-6 max-w-4xl w-full h-[85vh] flex flex-col justify-between shadow-2xl animate-in zoom-in-95 duration-200">
             
             {/* Header del Modal */}
@@ -1429,7 +1460,7 @@ export default function Home() {
 
       {/* MODAL AÑADIR NUEVA PERSONA O MASCOTA / GRUPO */}
       {isAddPersonOpen && (
-        <div className="fixed inset-0 bg-brand-navy/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-brand-navy/50 backdrop-blur-xs z-60 flex items-center justify-center p-4">
           <div className="bg-brand-cream border border-brand-navy/25 rounded-xs p-6 max-w-2xl w-full max-h-[85vh] flex flex-col justify-between shadow-2xl animate-in zoom-in-95 duration-200">
             
             {/* Header del Modal */}
@@ -1632,7 +1663,7 @@ export default function Home() {
       {/* MODAL CARRUSEL PANTALLA COMPLETA (MODO CINE) */}
       {isFullscreenCarousel && (
         <div
-          className="fixed inset-0 bg-brand-navy/95 backdrop-blur-md z-50 flex flex-col justify-between p-4 md:p-6 select-none animate-in fade-in duration-200"
+          className="fixed inset-0 bg-brand-navy/95 backdrop-blur-md z-60 flex flex-col justify-between p-4 md:p-6 select-none animate-in fade-in duration-200"
           onClick={() => setIsFullscreenCarousel(false)}
         >
           {/* Header del Modal */}
@@ -1752,7 +1783,7 @@ export default function Home() {
 
       {/* MODAL DIARIO DE HISTORIAS FAMILIARES (SCRAPBOOK INTERACTIVO) */}
       {selectedDiaryPhoto && (
-        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-xs z-60 flex items-center justify-center p-4">
           <div className="bg-brand-cream border border-brand-navy/25 rounded-xs p-6 max-w-4xl w-full max-h-[90vh] flex flex-col md:flex-row gap-6 shadow-2xl animate-in zoom-in-95 duration-200 overflow-y-auto md:overflow-visible">
             
             {/* Lateral Izquierdo: Fotografía */}

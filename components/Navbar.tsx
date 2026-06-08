@@ -51,6 +51,7 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
     message: string;
     read: boolean;
     timestamp: string;
+    photoName?: string;
   }
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -79,10 +80,11 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
     }
 
     const handleNewNotification = (e: Event) => {
-      const customEvent = e as CustomEvent<{ message: string }>;
+      const customEvent = e as CustomEvent<{ message: string; photoName?: string }>;
       const newNotif: NotificationItem = {
         id: `notif_${Date.now()}`,
         message: customEvent.detail.message,
+        photoName: customEvent.detail.photoName,
         read: false,
         timestamp: new Date().toISOString()
       };
@@ -188,7 +190,7 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
   }, [pathname]);
 
   return (
-    <header className={`h-16 fixed ${isLocalMode ? "top-8" : "top-0"} right-0 left-0 md:left-[280px] bg-brand-cream/90 backdrop-blur-md border-b border-brand-navy/10 flex items-center justify-between px-4 md:px-8 z-10 transition-all duration-300`}>
+    <header className={`h-16 fixed ${isLocalMode ? "top-8" : "top-0"} right-0 left-0 md:left-[280px] bg-brand-cream/90 backdrop-blur-md border-b border-brand-navy/10 flex items-center justify-between px-4 md:px-8 z-45 transition-all duration-300`}>
       {/* Lado izquierdo: Botón menú móvil + Título */}
       <div className="flex items-center gap-3 bg-transparent">
         {onOpenSidebar && (
@@ -277,14 +279,30 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
                   <p className="text-xs text-brand-navy/45 italic py-3 text-center bg-transparent">No hay notificaciones recientes.</p>
                 ) : (
                   notifications.map((n) => (
-                    <div key={n.id} className="text-left py-1.5 px-2 border-b border-brand-navy/5 bg-transparent flex flex-col gap-0.5 last:border-b-0">
+                    <button
+                      key={n.id}
+                      onClick={() => {
+                        if (n.photoName) {
+                          if (pathname !== "/") {
+                            localStorage.setItem("family_album_open_story_pending", n.photoName);
+                            router.push("/");
+                          } else {
+                            window.dispatchEvent(new CustomEvent("open-photo-story", { detail: { photoName: n.photoName } }));
+                          }
+                          setShowNotifDropdown(false);
+                        }
+                      }}
+                      className={`text-left w-full py-1.5 px-2 border-b border-brand-navy/5 bg-transparent flex flex-col gap-0.5 last:border-b-0 transition-colors ${
+                        n.photoName ? "hover:bg-brand-navy/5 cursor-pointer" : ""
+                      }`}
+                    >
                       <p className="text-xs text-brand-navy/85 font-medium leading-normal bg-transparent">
                         {n.message}
                       </p>
                       <p className="text-[8px] text-brand-navy/40 bg-transparent">
                         {new Date(n.timestamp).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
                       </p>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
