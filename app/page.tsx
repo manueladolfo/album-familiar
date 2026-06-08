@@ -660,10 +660,11 @@ export default function Home() {
           {currentCarouselPhotos.map((photo, index) => {
             const isActive = index === activeCollectionIndex;
             const photoId = (photo as any).id || photo.name;
-            const photoTitle = (photo as any).title || photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "") || photo.name;
             const photoDate = (photo as any).created_at || (photo as any).createdAt || "";
             const photoYear = photoDate ? photoDate.split("-")[0] : "";
-            const suggestedPersonName = photo.name.includes("playa") || photo.name.includes("bicicleta") ? "Ana Paula" : "Manuel Adolfo";
+            const meta = photoMetadata[photo.name];
+            const aiTags = meta?.tags?.slice(0, 4) || [];
+            const aiLocation = meta?.location || "";
 
             return (
               <div
@@ -674,7 +675,7 @@ export default function Home() {
               >
                 <img
                   src={photo.url}
-                  alt={photoTitle}
+                  alt={aiTags.join(", ") || "Recuerdo familiar"}
                   className="w-full h-full object-cover transition-transform duration-300"
                   style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                 />
@@ -682,18 +683,26 @@ export default function Home() {
                 {/* Degradado premium inferior */}
                 <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/90 via-transparent to-transparent flex flex-col justify-end p-6 md:p-8" />
                 
-                <div className="absolute bottom-6 left-6 md:bottom-8 md:left-8 z-20 text-brand-cream space-y-1 bg-transparent">
+                <div className="absolute bottom-6 left-6 md:bottom-8 md:left-8 z-20 text-brand-cream space-y-1.5 bg-transparent">
                   {photoYear && (
                     <span className="bg-brand-timber text-brand-cream text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-xs">
                       {photoYear}
                     </span>
                   )}
-                  <h4 className="text-sm md:text-lg font-light tracking-wide uppercase mt-1">
-                    {photoTitle}
-                  </h4>
-                  <p className="text-[10px] md:text-xs text-brand-cream/75 bg-transparent font-medium">
-                    Sugerido hoy en: Personas &gt; {suggestedPersonName}
-                  </p>
+                  {aiTags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {aiTags.map((tag, i) => (
+                        <span key={i} className="bg-brand-cream/15 backdrop-blur-sm text-brand-cream text-[10px] md:text-xs font-medium px-2 py-0.5 rounded-xs border border-brand-cream/20">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {aiLocation && (
+                    <p className="text-[10px] md:text-xs text-brand-cream/65 bg-transparent font-medium mt-0.5">
+                      📍 {aiLocation}
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -1493,9 +1502,11 @@ export default function Home() {
               {currentCarouselPhotos.map((photo, index) => {
                 const isActive = index === activeCollectionIndex;
                 const photoId = (photo as any).id || photo.name;
-                const photoTitle = (photo as any).title || photo.name.split("_").slice(1).join("_").replace(/\.webp$/, "") || photo.name;
                 const photoDate = (photo as any).created_at || (photo as any).createdAt || "";
                 const photoYear = photoDate ? photoDate.split("-")[0] : "";
+                const meta = photoMetadata[photo.name];
+                const aiTags = meta?.tags?.slice(0, 4) || [];
+                const aiLocation = meta?.location || "";
 
                 return (
                   <div
@@ -1508,22 +1519,33 @@ export default function Home() {
                     <div className="relative max-w-full max-h-[50vh] sm:max-h-[70vh] md:max-h-[75vh] landscape:max-h-[50vh] landscape:md:max-h-[72vh] flex items-center justify-center overflow-hidden rounded-xs border border-brand-cream/10 shadow-2xl bg-black/10">
                       <img
                         src={photo.url}
-                        alt={photoTitle}
+                        alt={aiTags.join(", ") || "Recuerdo familiar"}
                         className="object-contain w-auto h-auto max-w-full max-h-[50vh] sm:max-h-[70vh] md:max-h-[75vh] landscape:max-h-[50vh] landscape:md:max-h-[72vh] transition-transform duration-300"
                         style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
                         onClick={(e) => e.stopPropagation()}
                       />
                       
-                      {/* Título superpuesto */}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand-navy/90 to-transparent p-4 text-left text-brand-cream flex flex-col gap-0.5 pointer-events-none">
+                      {/* Información superpuesta */}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand-navy/90 to-transparent p-4 text-left text-brand-cream flex flex-col gap-1 pointer-events-none">
                         {photoYear && (
                           <span className="bg-brand-timber text-brand-cream text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-xs w-max">
                             {photoYear}
                           </span>
                         )}
-                        <h4 className="text-xs md:text-sm font-semibold uppercase tracking-wide mt-1">
-                          {photoTitle}
-                        </h4>
+                        {aiTags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {aiTags.map((tag, i) => (
+                              <span key={i} className="bg-brand-cream/15 backdrop-blur-sm text-brand-cream text-[9px] md:text-[11px] font-medium px-2 py-0.5 rounded-xs border border-brand-cream/20">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {aiLocation && (
+                          <p className="text-[9px] md:text-xs text-brand-cream/60 font-medium mt-0.5">
+                            📍 {aiLocation}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
