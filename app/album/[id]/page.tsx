@@ -857,11 +857,13 @@ export default function AlbumPage({ params }: PageProps) {
           </div>
         )}
       </div>
-      {/* Lightbox para ver la imagen a pantalla completa */}
       {activeLightboxPhoto && (
         <div
           onClick={() => setActiveLightboxPhoto(null)}
-          className="fixed inset-0 bg-brand-navy/90 backdrop-blur-md z-50 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+          className="fixed inset-0 bg-brand-navy/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          style={{
+            cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='black' stroke-width='3'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='black' stroke-width='3'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='black' stroke-width='3'/%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='white' stroke-width='2'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='white' stroke-width='2'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 14 14, pointer`
+          }}
         >
           <div className="absolute top-6 right-6 flex items-center gap-4 z-50">
             {/* Botón de girar */}
@@ -890,8 +892,10 @@ export default function AlbumPage({ params }: PageProps) {
             src={activeLightboxPhoto.url}
             alt="Recuerdo Familiar Ampliado"
             className="max-w-full max-h-[85vh] object-contain rounded-xs border border-brand-cream/20 shadow-2xl animate-in zoom-in-95 duration-200 transition-transform duration-300"
-            style={{ transform: `rotate(${rotations[activeLightboxPhoto.name] || 0}deg)` }}
-            onClick={(e) => e.stopPropagation()}
+            style={{
+              transform: `rotate(${rotations[activeLightboxPhoto.name] || 0}deg)`,
+              cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='black' stroke-width='3'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='black' stroke-width='3'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='black' stroke-width='3'/%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='white' stroke-width='2'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='white' stroke-width='2'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 14 14, pointer`
+            }}
           />
         </div>
       )}

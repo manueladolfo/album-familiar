@@ -779,7 +779,9 @@ export default function PhotosPage() {
                   draggable={!isSelectMode}
                   onDragStart={(e) => !isSelectMode && handlePhotoDragStart(e, photo.name)}
                   onClick={() => isSelectMode ? toggleSelectPhoto(photo.name) : setActiveLightboxPhoto({ url: originalUrl, name: photo.name })}
-                  className={`group relative aspect-square bg-brand-cream/50 rounded-xs border transition-all duration-300 select-none overflow-hidden ${
+                  className={`group relative aspect-square bg-brand-cream/50 rounded-xs border transition-all duration-300 select-none ${
+                    openAlbumDropdownPhoto === photo.name ? "z-40" : "z-10"
+                  } ${
                     isSelectMode
                       ? selectedPhotos.has(photo.name)
                         ? "border-brand-navy ring-2 ring-brand-navy cursor-pointer"
@@ -913,34 +915,36 @@ export default function PhotosPage() {
                   {openAlbumDropdownPhoto === photo.name && (
                     <div
                       data-album-dropdown
-                      className="absolute top-11 right-3 bg-brand-cream border border-brand-navy/25 rounded-xs p-2 shadow-xl z-30 flex flex-col gap-1 w-44 animate-in fade-in duration-150 cursor-default"
+                      className="absolute top-11 right-3 bg-brand-cream border border-brand-navy/25 rounded-xs p-2 shadow-xl z-50 flex flex-col gap-1 w-44 animate-in fade-in duration-150 cursor-default"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <p className="text-[9px] uppercase font-bold text-brand-navy/40 tracking-wider px-2 py-1 border-b border-brand-navy/5">
                         Añadir al álbum
                       </p>
-                      {albums.map((album) => (
-                        <button
-                          key={album.id}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            setOpenAlbumDropdownPhoto(null);
-                            await handleAddPhotoToAlbum(photo.name, album.id);
-                          }}
-                          className={`w-full text-left text-[11px] font-medium py-1.5 px-2 hover:bg-brand-navy/5 rounded-xs transition-colors cursor-pointer ${
-                            photo.album_id === album.id ? "text-brand-timber font-semibold" : "text-brand-navy"
-                          }`}
-                        >
-                          {album.name} {photo.album_id === album.id ? "✓" : ""}
-                        </button>
-                      ))}
+                      <div className="flex flex-col gap-1 max-h-48 overflow-y-auto py-1 scrollbar-thin">
+                        {albums.map((album) => (
+                          <button
+                            key={album.id}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setOpenAlbumDropdownPhoto(null);
+                              await handleAddPhotoToAlbum(photo.name, album.id);
+                            }}
+                            className={`w-full text-left text-[11px] font-medium py-1.5 px-2 hover:bg-brand-navy/5 rounded-xs transition-colors cursor-pointer ${
+                              photo.album_id === album.id ? "text-brand-timber font-semibold" : "text-brand-navy"
+                            }`}
+                          >
+                            {album.name} {photo.album_id === album.id ? "✓" : ""}
+                          </button>
+                        ))}
+                      </div>
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
                           setOpenAlbumDropdownPhoto(null);
                           await handleAddPhotoToAlbum(photo.name, null);
                         }}
-                        className="w-full text-left text-[10px] font-bold text-red-600 py-1.5 px-2 hover:bg-red-50 rounded-xs transition-colors cursor-pointer border-t border-brand-navy/5"
+                        className="w-full text-left text-[10px] font-bold text-red-600 py-1.5 px-2 hover:bg-red-50 rounded-xs transition-colors cursor-pointer border-t border-brand-navy/5 mt-1 pt-1.5"
                       >
                         Quitar del álbum
                       </button>
@@ -952,11 +956,13 @@ export default function PhotosPage() {
           </div>
         )}
       </div>
-      {/* Lightbox para ver la imagen a pantalla completa */}
       {activeLightboxPhoto && (
         <div
           onClick={() => setActiveLightboxPhoto(null)}
-          className="fixed inset-0 bg-brand-navy/90 backdrop-blur-md z-50 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+          className="fixed inset-0 bg-brand-navy/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          style={{
+            cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='black' stroke-width='3'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='black' stroke-width='3'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='black' stroke-width='3'/%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='white' stroke-width='2'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='white' stroke-width='2'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 14 14, pointer`
+          }}
         >
           <div className="absolute top-6 right-6 flex items-center gap-4 z-50">
             {/* Botón de girar */}
@@ -985,8 +991,10 @@ export default function PhotosPage() {
             src={activeLightboxPhoto.url}
             alt="Recuerdo Familiar Ampliado"
             className="max-w-full max-h-[85vh] object-contain rounded-xs border border-brand-cream/20 shadow-2xl animate-in zoom-in-95 duration-200 transition-transform duration-300"
-            style={{ transform: `rotate(${rotations[activeLightboxPhoto.name] || 0}deg)` }}
-            onClick={(e) => e.stopPropagation()}
+            style={{
+              transform: `rotate(${rotations[activeLightboxPhoto.name] || 0}deg)`,
+              cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='black' stroke-width='3'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='black' stroke-width='3'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='black' stroke-width='3'/%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='white' stroke-width='2'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='white' stroke-width='2'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 14 14, pointer`
+            }}
           />
         </div>
       )}
