@@ -206,34 +206,66 @@ export default function Home() {
       }
     }
 
-    // 2. Cargar personas de LocalStorage o sembrar iniciales
-    const savedPeople = localStorage.getItem("family_album_people");
-    if (savedPeople) {
-      setPeople(JSON.parse(savedPeople));
-    } else {
-      localStorage.setItem("family_album_people", JSON.stringify(DEFAULT_PEOPLE));
-      setPeople(DEFAULT_PEOPLE);
-    }
+    // 2 y 3. Cargar personas y mapeo de fotos etiquetadas (Supabase o LocalStorage)
+    const loadConfig = async () => {
+      const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
+      let loadedPeople = null;
+      let loadedTagged = null;
 
-    // 3. Cargar mapeo de fotos etiquetadas a personas
-    const savedTagged = localStorage.getItem("family_album_person_tags");
-    if (savedTagged) {
-      setTaggedPhotos(JSON.parse(savedTagged));
-    } else {
-      // Mapear recuerdos de muestra iniciales por defecto a personas
-      const initialTags: Record<string, string[]> = {
-        "p_ma_cynthia": ["sample_boda_1980.webp", "sample_navidad_1992.webp"],
-        "p_ap_manuel": ["sample_playa_1985.webp", "sample_bicicleta_1987.webp"],
-        "p_ma_manuel": ["sample_picnic_1988.webp", "sample_navidad_1992.webp"],
-        "p_manuel_adolfo": ["sample_picnic_1988.webp", "sample_boda_1980.webp", "sample_navidad_1992.webp"],
-        "p_ana_paula": ["sample_playa_1985.webp", "sample_bicicleta_1987.webp", "sample_cumpleanos_1991.webp"],
-        "p_manuel": ["sample_picnic_1988.webp", "sample_playa_1985.webp", "sample_bicicleta_1987.webp"],
-        "p_cynthia": ["sample_boda_1980.webp", "sample_navidad_1992.webp"],
-        "p_dante": ["sample_playa_1985.webp"]
-      };
-      localStorage.setItem("family_album_person_tags", JSON.stringify(initialTags));
-      setTaggedPhotos(initialTags);
-    }
+      if (!localActive) {
+        try {
+          const { data } = await supabase
+            .from("albums")
+            .select("id, name, cover_url")
+            .eq("name", "__system_config__")
+            .limit(1);
+
+          if (data && data.length > 0 && data[0].cover_url) {
+            const config = JSON.parse(data[0].cover_url);
+            loadedPeople = config.people;
+            loadedTagged = config.taggedPhotos;
+          }
+        } catch (err) {
+          console.error("Error al cargar config de personas desde Supabase:", err);
+        }
+      }
+
+      if (loadedPeople && loadedTagged) {
+        setPeople(loadedPeople);
+        setTaggedPhotos(loadedTagged);
+        localStorage.setItem("family_album_people", JSON.stringify(loadedPeople));
+        localStorage.setItem("family_album_person_tags", JSON.stringify(loadedTagged));
+      } else {
+        const savedPeople = localStorage.getItem("family_album_people");
+        let currentPeople = DEFAULT_PEOPLE;
+        if (savedPeople) {
+          currentPeople = JSON.parse(savedPeople);
+        } else {
+          localStorage.setItem("family_album_people", JSON.stringify(DEFAULT_PEOPLE));
+        }
+        setPeople(currentPeople);
+
+        const savedTagged = localStorage.getItem("family_album_person_tags");
+        let currentTagged = {
+          "p_ma_cynthia": ["sample_boda_1980.webp", "sample_navidad_1992.webp"],
+          "p_ap_manuel": ["sample_playa_1985.webp", "sample_bicicleta_1987.webp"],
+          "p_ma_manuel": ["sample_picnic_1988.webp", "sample_navidad_1992.webp"],
+          "p_manuel_adolfo": ["sample_picnic_1988.webp", "sample_boda_1980.webp", "sample_navidad_1992.webp"],
+          "p_ana_paula": ["sample_playa_1985.webp", "sample_bicicleta_1987.webp", "sample_cumpleanos_1991.webp"],
+          "p_manuel": ["sample_picnic_1988.webp", "sample_playa_1985.webp", "sample_bicicleta_1987.webp"],
+          "p_cynthia": ["sample_boda_1980.webp", "sample_navidad_1992.webp"],
+          "p_dante": ["sample_playa_1985.webp"]
+        };
+        if (savedTagged) {
+          currentTagged = JSON.parse(savedTagged);
+        } else {
+          localStorage.setItem("family_album_person_tags", JSON.stringify(currentTagged));
+        }
+        setTaggedPhotos(currentTagged);
+      }
+    };
+
+    loadConfig();
 
     // 4. Cargar fotos importadas, remotas y metadatos de IA
     const loadImportedAndMetadata = async () => {
@@ -346,9 +378,12 @@ export default function Home() {
       const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
       if (!localActive) {
         try {
-          const { data, error } = await supabase.from("albums").select("id, name");
+          const { data, error } = await supabase.from("albums").select("id, name, cover_url");
           if (error) throw error;
-          if (data) setAlbums(data);
+          if (data) {
+            const filtered = data.filter((a) => !a.name.startsWith("__system_"));
+            setAlbums(filtered);
+          }
         } catch (err) {
           console.error("Error al cargar álbumes de Supabase en Inicio:", err);
         }
@@ -405,6 +440,37 @@ export default function Home() {
     }
   }, [selectedPerson, taggedPhotos, libraryPhotos, photoMetadata]);
 
+  // Guardar configuración de personas y fotos etiquetadas a Supabase (y local)
+  const savePeopleConfig = async (newPeople: PersonProfile[], newTaggedPhotos: Record<string, string[]>) => {
+    localStorage.setItem("family_album_people", JSON.stringify(newPeople));
+    localStorage.setItem("family_album_person_tags", JSON.stringify(newTaggedPhotos));
+
+    const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
+    if (!localActive) {
+      try {
+        const { data: existing } = await supabase
+          .from("albums")
+          .select("id")
+          .eq("name", "__system_config__")
+          .limit(1);
+
+        const configJson = JSON.stringify({ people: newPeople, taggedPhotos: newTaggedPhotos });
+        if (existing && existing.length > 0) {
+          await supabase
+            .from("albums")
+            .update({ cover_url: configJson })
+            .eq("id", existing[0].id);
+        } else {
+          await supabase
+            .from("albums")
+            .insert({ name: "__system_config__", cover_url: configJson });
+        }
+      } catch (err) {
+        console.error("Error al guardar la configuración de personas en Supabase:", err);
+      }
+    }
+  };
+
   // Añadir una foto seleccionada al perfil de la persona
   const addPhotoToPerson = (photoName: string) => {
     if (!selectedPerson) return;
@@ -416,7 +482,7 @@ export default function Home() {
     }
     newTagged[selectedPerson.id] = currentList;
 
-    localStorage.setItem("family_album_person_tags", JSON.stringify(newTagged));
+    savePeopleConfig(people, newTagged);
     setTaggedPhotos(newTagged);
     setFeedback({ type: "success", text: `Recuerdo asociado con éxito a ${selectedPerson.name}.` });
   };
@@ -428,7 +494,7 @@ export default function Home() {
     const newTagged = { ...taggedPhotos };
     newTagged[selectedPerson.id] = (newTagged[selectedPerson.id] || []).filter(name => name !== photoName);
 
-    localStorage.setItem("family_album_person_tags", JSON.stringify(newTagged));
+    savePeopleConfig(people, newTagged);
     setTaggedPhotos(newTagged);
   };
 
@@ -436,7 +502,7 @@ export default function Home() {
   const setPersonAvatar = (personId: string, photoUrl: string) => {
     const updatedPeople = people.map(p => p.id === personId ? { ...p, avatar: photoUrl } : p);
     setPeople(updatedPeople);
-    localStorage.setItem("family_album_people", JSON.stringify(updatedPeople));
+    savePeopleConfig(updatedPeople, taggedPhotos);
     
     if (selectedPerson && selectedPerson.id === personId) {
       setSelectedPerson({ ...selectedPerson, avatar: photoUrl });
@@ -455,13 +521,13 @@ export default function Home() {
     // 1. Filtrar la persona de la lista
     const updatedPeople = people.filter(p => p.id !== personId);
     setPeople(updatedPeople);
-    localStorage.setItem("family_album_people", JSON.stringify(updatedPeople));
 
     // 2. Limpiar el mapeo de fotos etiquetadas correspondientes
     const updatedTagged = { ...taggedPhotos };
     delete updatedTagged[personId];
     setTaggedPhotos(updatedTagged);
-    localStorage.setItem("family_album_person_tags", JSON.stringify(updatedTagged));
+
+    savePeopleConfig(updatedPeople, updatedTagged);
 
     // 3. Si estaba seleccionado, cerrar modal
     if (selectedPerson && selectedPerson.id === personId) {
@@ -619,6 +685,7 @@ export default function Home() {
       localStorage.setItem("family_album_cleared", "true");
       setImportedPhotos([]);
       setTaggedPhotos({});
+      savePeopleConfig(people, {});
       setFeedback({ type: "success", text: "Biblioteca y mapeos limpiados correctamente." });
       window.dispatchEvent(new CustomEvent("photo-moved"));
     } catch {
@@ -1078,7 +1145,7 @@ export default function Home() {
                       loading="lazy"
                     />
                     {year && (
-                      <div className="absolute top-3 right-3 bg-brand-cream/90 backdrop-blur-xs text-brand-navy text-[10px] font-semibold px-2 py-0.5 rounded-xs shadow-sm">
+                      <div className="absolute top-3 right-11 bg-brand-cream/90 backdrop-blur-xs text-brand-navy text-[10px] font-semibold px-2 py-0.5 rounded-xs shadow-sm z-20">
                         {year}
                       </div>
                     )}
@@ -1089,24 +1156,24 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* Hover overlay translúcido con desenfoque de cristal */}
-                    <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
-                      <div className="flex justify-end gap-1.5 bg-transparent">
-                        {/* Botón Mover a Papelera */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            moveToTrashFromHome(photo.name);
-                          }}
-                          className="p-2 border border-red-400/40 hover:bg-red-500/20 text-red-400 rounded-xs transition-all cursor-pointer"
-                          title="Mover a la papelera"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
+                    {/* Botón Mover a Papelera siempre visible en móvil, y en hover en web */}
+                    <div className="absolute top-3 right-3 z-30 bg-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          moveToTrashFromHome(photo.name);
+                        }}
+                        className="p-1.5 bg-black/55 backdrop-blur-xs border border-red-500/20 text-red-400 rounded-xs transition-all hover:bg-red-500/30 cursor-pointer flex items-center justify-center"
+                        title="Mover a la papelera"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
 
+                    {/* Hover overlay translúcido con desenfoque de cristal */}
+                    <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-end p-4 z-10">
                       <div className="bg-transparent text-left space-y-0.5">
                         <p className="text-brand-cream/70 text-[9px]">
                           {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
@@ -1614,7 +1681,6 @@ export default function Home() {
                       avatarUrl = firstPhoto.url;
                     }
                   }
-
                   const newPerson: PersonProfile = {
                     id: newId,
                     name: newPersonName.trim(),
@@ -1625,14 +1691,14 @@ export default function Home() {
 
                   const updatedPeople = [...people, newPerson];
                   setPeople(updatedPeople);
-                  localStorage.setItem("family_album_people", JSON.stringify(updatedPeople));
 
                   const updatedTagged = {
                     ...taggedPhotos,
                     [newId]: selectedPhotoNamesForNewPerson
                   };
                   setTaggedPhotos(updatedTagged);
-                  localStorage.setItem("family_album_person_tags", JSON.stringify(updatedTagged));
+
+                  savePeopleConfig(updatedPeople, updatedTagged);
 
                   setIsAddPersonOpen(false);
                   setNewPersonName("");

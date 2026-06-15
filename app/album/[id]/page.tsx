@@ -39,6 +39,42 @@ export default function AlbumPage({ params }: PageProps) {
 
   const [albumCover, setAlbumCover] = useState<string | null>(null);
 
+  // Estado y refs para pulsación larga (long press) en móviles
+  const [activeActionMenuPhoto, setActiveActionMenuPhoto] = useState<string | null>(null);
+  const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef<boolean>(false);
+
+  const handleTouchStart = (photoName: string) => {
+    isLongPressRef.current = false;
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    
+    touchTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      setActiveActionMenuPhoto(photoName);
+      if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(50);
+      }
+    }, 500); // 500ms
+  };
+
+  const handleTouchMove = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+    if (isLongPressRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
   // Estado de selección por lotes
   const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
@@ -221,11 +257,45 @@ export default function AlbumPage({ params }: PageProps) {
           return dateB - dateA;
         });
 
-      const peopleJson = localStorage.getItem("family_album_people") || "[]";
-      setPeople(JSON.parse(peopleJson));
+      // Cargar personas, tags de personas y metadata de IA (Supabase o LocalStorage)
+      const loadPeopleConfig = async () => {
+        const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
+        let loadedPeople = null;
+        let loadedTagged = null;
 
-      const taggedJson = localStorage.getItem("family_album_person_tags") || "{}";
-      setTaggedPhotos(JSON.parse(taggedJson));
+        if (!localActive) {
+          try {
+            const { data } = await supabase
+              .from("albums")
+              .select("id, name, cover_url")
+              .eq("name", "__system_config__")
+              .limit(1);
+
+            if (data && data.length > 0 && data[0].cover_url) {
+              const config = JSON.parse(data[0].cover_url);
+              loadedPeople = config.people;
+              loadedTagged = config.taggedPhotos;
+            }
+          } catch (err) {
+            console.error("Error al cargar config de personas desde Supabase (Album):", err);
+          }
+        }
+
+        if (loadedPeople && loadedTagged) {
+          setPeople(loadedPeople);
+          setTaggedPhotos(loadedTagged);
+          localStorage.setItem("family_album_people", JSON.stringify(loadedPeople));
+          localStorage.setItem("family_album_person_tags", JSON.stringify(loadedTagged));
+        } else {
+          const peopleJson = localStorage.getItem("family_album_people") || "[]";
+          setPeople(JSON.parse(peopleJson));
+
+          const taggedJson = localStorage.getItem("family_album_person_tags") || "{}";
+          setTaggedPhotos(JSON.parse(taggedJson));
+        }
+      };
+
+      await loadPeopleConfig();
 
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
@@ -274,6 +344,21 @@ export default function AlbumPage({ params }: PageProps) {
       window.removeEventListener("local-mode-changed", handlePhotoMoved);
     };
   }, [id]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement;
+      if (target && !target.closest("[data-photo-card]")) {
+        setActiveActionMenuPhoto(null);
+      }
+    };
+    document.addEventListener("click", handleClickOutside as any);
+    document.addEventListener("touchstart", handleClickOutside as any);
+    return () => {
+      document.removeEventListener("click", handleClickOutside as any);
+      document.removeEventListener("touchstart", handleClickOutside as any);
+    };
+  }, []);
 
   // Comprimir imagen usando Canvas en el cliente (max 500px, WebP)
   const compressImage = (file: File): Promise<Blob> => {
@@ -744,13 +829,33 @@ export default function AlbumPage({ params }: PageProps) {
               return (
                 <div
                   key={photo.name}
-                  onClick={() => isSelectMode ? toggleSelectPhoto(photo.name) : setActiveLightboxPhoto({ url: originalUrl, name: photo.name })}
+                  data-photo-card
+                  onTouchStart={() => !isSelectMode && handleTouchStart(photo.name)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  onClick={() => {
+                    if (isLongPressRef.current) {
+                      isLongPressRef.current = false;
+                      return;
+                    }
+                    if (isSelectMode) {
+                      toggleSelectPhoto(photo.name);
+                    } else {
+                      if (activeActionMenuPhoto) {
+                        setActiveActionMenuPhoto(null);
+                      } else {
+                        setActiveLightboxPhoto({ url: originalUrl, name: photo.name });
+                      }
+                    }
+                  }}
                   className={`group relative aspect-square bg-brand-cream/50 rounded-xs overflow-hidden border transition-all duration-300 select-none ${
+                    activeActionMenuPhoto === photo.name ? "z-40" : "z-10"
+                  } ${
                     isSelectMode
                       ? selectedPhotos.has(photo.name)
                         ? "border-brand-navy ring-2 ring-brand-navy cursor-pointer"
                         : "border-brand-navy/10 hover:border-brand-navy/40 cursor-pointer"
-                      : isCurrentCover
+                      : isCurrentCover || activeActionMenuPhoto === photo.name
                         ? "border-brand-navy ring-2 ring-brand-navy cursor-zoom-in"
                         : "border-brand-navy/10 hover:border-brand-navy cursor-zoom-in"
                   }`}
@@ -779,25 +884,31 @@ export default function AlbumPage({ params }: PageProps) {
                     loading="lazy"
                   />
                   
-                  {/* Hover overlay con desenfoque de cristal */}
+                  {/* Botón Quitar del álbum visible en móvil al pulsar largo, y en hover en web */}
                   {!isSelectMode && (
-                  <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-between p-4 z-10">
-                    <div className="flex justify-end bg-transparent">
-                      {/* Botón Quitar del álbum */}
+                    <div className={`absolute top-2 right-2 z-30 bg-transparent transition-opacity duration-200 ${
+                      activeActionMenuPhoto === photo.name 
+                        ? "opacity-100 flex" 
+                        : "hidden md:flex md:opacity-0 md:group-hover:opacity-100"
+                    }`}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           removeFromAlbum(photo.name);
                         }}
-                        className="p-2 border border-red-400/40 hover:bg-red-500/20 text-red-400 rounded-xs transition-all cursor-pointer"
+                        className="p-1.5 bg-black/55 backdrop-blur-xs border border-red-500/20 text-red-400 rounded-xs transition-all hover:bg-red-500/30 cursor-pointer flex items-center justify-center"
                         title="Quitar del álbum"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
                     </div>
+                  )}
 
+                  {/* Hover overlay con desenfoque de cristal */}
+                  {!isSelectMode && (
+                  <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-end p-4 z-10">
                     <div className="bg-transparent space-y-2">
                       <div className="bg-transparent text-left">
                         <p className="text-brand-cream/70 text-[10px] mt-0.5">

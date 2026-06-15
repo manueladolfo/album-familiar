@@ -304,7 +304,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           .order("name");
 
         if (error) throw error;
-        if (data) setAlbums(data);
+        if (data) {
+          const filtered = data.filter((a) => !a.name.startsWith("__system_"));
+          setAlbums(filtered);
+        }
       } catch (err) {
         console.error("Fallo al cargar álbumes de Supabase:", err);
       }
