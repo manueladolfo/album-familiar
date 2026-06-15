@@ -68,10 +68,59 @@ export default function TrashPage() {
     });
   };
 
+  const handlePrevPhoto = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!activeLightboxPhoto) return;
+    const currentIndex = filteredPhotos.findIndex((p) => p.name === activeLightboxPhoto.name);
+    if (currentIndex > 0) {
+      const prevPhoto = filteredPhotos[currentIndex - 1];
+      const isRemote = prevPhoto.url.includes("supabase.co");
+      let originalUrl: string;
+      if (prevPhoto.url_original) {
+        originalUrl = prevPhoto.url_original;
+      } else if (isRemote) {
+        const nameWithoutWebp = prevPhoto.name.replace(/\.webp$/, "");
+        originalUrl = supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl;
+      } else {
+        originalUrl = prevPhoto.url;
+      }
+      setActiveLightboxPhoto({ url: originalUrl, name: prevPhoto.name });
+    }
+  };
+
+  const handleNextPhoto = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!activeLightboxPhoto) return;
+    const currentIndex = filteredPhotos.findIndex((p) => p.name === activeLightboxPhoto.name);
+    if (currentIndex < filteredPhotos.length - 1) {
+      const nextPhoto = filteredPhotos[currentIndex + 1];
+      const isRemote = nextPhoto.url.includes("supabase.co");
+      let originalUrl: string;
+      if (nextPhoto.url_original) {
+        originalUrl = nextPhoto.url_original;
+      } else if (isRemote) {
+        const nameWithoutWebp = nextPhoto.name.replace(/\.webp$/, "");
+        originalUrl = supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl;
+      } else {
+        originalUrl = nextPhoto.url;
+      }
+      setActiveLightboxPhoto({ url: originalUrl, name: nextPhoto.name });
+    }
+  };
+
   // Estados para Búsqueda Inteligente e IA
   const [people, setPeople] = useState<PersonProfile[]>([]);
   const [taggedPhotos, setTaggedPhotos] = useState<Record<string, string[]>>({});
   const [photoMetadata, setPhotoMetadata] = useState<Record<string, PhotoMetadata>>({});
+
+  const filteredPhotos = filterPhotos(
+    photos,
+    searchQuery,
+    [],
+    people,
+    taggedPhotos,
+    photoMetadata
+  );
 
   // Cargar fotos eliminadas (status === 'trash')
   const fetchTrashPhotos = async () => {
@@ -197,6 +246,23 @@ export default function TrashPage() {
       document.removeEventListener("touchstart", handleClickOutside as any);
     };
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!activeLightboxPhoto) return;
+      if (e.key === "ArrowLeft") {
+        handlePrevPhoto();
+      } else if (e.key === "ArrowRight") {
+        handleNextPhoto();
+      } else if (e.key === "Escape") {
+        setActiveLightboxPhoto(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeLightboxPhoto, filteredPhotos]);
 
   // Restaurar una foto
   const restorePhoto = async (photoName: string) => {
@@ -561,15 +627,6 @@ export default function TrashPage() {
     }
   };
 
-  const filteredPhotos = filterPhotos(
-    photos,
-    searchQuery,
-    [],
-    people,
-    taggedPhotos,
-    photoMetadata
-  );
-
   return (
     <div className="flex-1 p-4 md:p-8 space-y-6 md:space-y-8 bg-brand-cream overflow-y-auto">
       {/* Cabecera */}
@@ -928,6 +985,31 @@ export default function TrashPage() {
               cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='black' stroke-width='3'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='black' stroke-width='3'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='black' stroke-width='3'/%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='white' stroke-width='2'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='white' stroke-width='2'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 14 14, pointer`
             }}
           />
+
+          {/* Botones de navegación (Flechas izquierda/derecha) */}
+          {filteredPhotos.findIndex(p => p.name === activeLightboxPhoto.name) > 0 && (
+            <button
+              onClick={handlePrevPhoto}
+              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/55 backdrop-blur-xs text-white rounded-full border border-white/20 transition-all hover:bg-black/75 cursor-pointer z-70 flex items-center justify-center shadow-lg"
+              title="Foto anterior"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+          )}
+
+          {filteredPhotos.findIndex(p => p.name === activeLightboxPhoto.name) < filteredPhotos.length - 1 && (
+            <button
+              onClick={handleNextPhoto}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/55 backdrop-blur-xs text-white rounded-full border border-white/20 transition-all hover:bg-black/75 cursor-pointer z-70 flex items-center justify-center shadow-lg"
+              title="Siguiente foto"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          )}
 
           {/* Barra de herramientas inferior del Lightbox de Papelera */}
           <div 

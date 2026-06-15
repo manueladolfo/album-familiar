@@ -46,6 +46,16 @@ export default function PhotosPage() {
   // Estado de Favoritos
   const [favorites, setFavorites] = useState<string[]>([]);
 
+  let filteredPhotos = filterPhotos(photos, searchQuery, albums, people, taggedPhotos, photoMetadata);
+
+  if (filterParam === "favorites") {
+    filteredPhotos = filteredPhotos.filter((photo) => favorites.includes(photo.name));
+  }
+
+  if (filterParam === "recent") {
+    filteredPhotos = filteredPhotos.slice(0, 12);
+  }
+
   useEffect(() => {
     const savedFavorites = localStorage.getItem("family_album_favorites");
     if (savedFavorites) {
@@ -119,6 +129,66 @@ export default function PhotosPage() {
       e.stopPropagation();
     }
   };
+
+  const handlePrevPhoto = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!activeLightboxPhoto) return;
+    const currentIndex = filteredPhotos.findIndex((p) => p.name === activeLightboxPhoto.name);
+    if (currentIndex > 0) {
+      const prevPhoto = filteredPhotos[currentIndex - 1];
+      const isRemote = prevPhoto.url.includes("supabase.co");
+      let originalUrl: string;
+      if (prevPhoto.url_original) {
+        originalUrl = prevPhoto.url_original;
+      } else if (isRemote) {
+        const nameWithoutWebp = prevPhoto.name.replace(/\.webp$/, "");
+        originalUrl = supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl;
+      } else {
+        originalUrl = prevPhoto.url;
+      }
+      setActiveLightboxPhoto({ url: originalUrl, name: prevPhoto.name });
+      setOpenLightboxAlbumDropdown(null);
+    }
+  };
+
+  const handleNextPhoto = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!activeLightboxPhoto) return;
+    const currentIndex = filteredPhotos.findIndex((p) => p.name === activeLightboxPhoto.name);
+    if (currentIndex < filteredPhotos.length - 1) {
+      const nextPhoto = filteredPhotos[currentIndex + 1];
+      const isRemote = nextPhoto.url.includes("supabase.co");
+      let originalUrl: string;
+      if (nextPhoto.url_original) {
+        originalUrl = nextPhoto.url_original;
+      } else if (isRemote) {
+        const nameWithoutWebp = nextPhoto.name.replace(/\.webp$/, "");
+        originalUrl = supabase.storage.from("family-album").getPublicUrl(`originals/${nameWithoutWebp}`).data.publicUrl;
+      } else {
+        originalUrl = nextPhoto.url;
+      }
+      setActiveLightboxPhoto({ url: originalUrl, name: nextPhoto.name });
+      setOpenLightboxAlbumDropdown(null);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!activeLightboxPhoto) return;
+      if (e.key === "ArrowLeft") {
+        handlePrevPhoto();
+      } else if (e.key === "ArrowRight") {
+        handleNextPhoto();
+      } else if (e.key === "Escape") {
+        setActiveLightboxPhoto(null);
+        setOpenLightboxAlbumDropdown(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeLightboxPhoto, filteredPhotos]);
 
   // Estado de selección por lotes
   const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
@@ -783,16 +853,6 @@ export default function PhotosPage() {
     return album ? album.name : null;
   };
 
-  let filteredPhotos = filterPhotos(photos, searchQuery, albums, people, taggedPhotos, photoMetadata);
-
-  if (filterParam === "favorites") {
-    filteredPhotos = filteredPhotos.filter((photo) => favorites.includes(photo.name));
-  }
-
-  if (filterParam === "recent") {
-    filteredPhotos = filteredPhotos.slice(0, 12);
-  }
-
 
   return (
     <div className="flex-1 p-4 md:p-8 space-y-6 md:space-y-8 bg-brand-cream overflow-y-auto">
@@ -1000,9 +1060,28 @@ export default function PhotosPage() {
                       loading="lazy"
                     />
 
-                    {/* Botones de acción visibles en móvil al pulsar largo, y en hover en web */}
+                    {/* Botón de Añadir a Álbum (más) permanente */}
                     {!isSelectMode && (
-                      <div className={`absolute top-2 right-2 z-30 flex gap-1.5 bg-transparent transition-opacity duration-200 ${
+                      <div className="absolute top-2 right-2 z-30 flex">
+                        <button
+                          data-album-dropdown-trigger
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenAlbumDropdownPhoto(openAlbumDropdownPhoto === photo.name ? null : photo.name);
+                          }}
+                          className="p-1.5 bg-black/55 backdrop-blur-xs border border-white/20 text-white rounded-xs transition-all hover:bg-black/70 cursor-pointer flex items-center justify-center shadow-md"
+                          title="Añadir a un álbum..."
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Botones de Favorito y Papelera (esquina superior izquierda) */}
+                    {!isSelectMode && (
+                      <div className={`absolute top-2 left-2 z-30 flex gap-1.5 bg-transparent transition-opacity duration-200 ${
                         activeActionMenuPhoto === photo.name 
                           ? "opacity-100 flex" 
                           : "hidden md:flex md:opacity-0 md:group-hover:opacity-100"
@@ -1026,21 +1105,6 @@ export default function PhotosPage() {
                             viewBox="0 0 24 24"
                           >
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                          </svg>
-                        </button>
-
-                        {/* Botón de Añadir a Álbum */}
-                        <button
-                          data-album-dropdown-trigger
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenAlbumDropdownPhoto(openAlbumDropdownPhoto === photo.name ? null : photo.name);
-                          }}
-                          className="p-1.5 bg-black/55 backdrop-blur-xs border border-white/20 text-white rounded-xs transition-all hover:bg-black/70 cursor-pointer flex items-center justify-center"
-                          title="Añadir a un álbum..."
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                           </svg>
                         </button>
 
@@ -1185,6 +1249,31 @@ export default function PhotosPage() {
               cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='black' stroke-width='3'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='black' stroke-width='3'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='black' stroke-width='3'/%3E%3Ccircle cx='14' cy='14' r='8' fill='none' stroke='white' stroke-width='2'/%3E%3Cline x1='20' y1='20' x2='28' y2='28' stroke='white' stroke-width='2'/%3E%3Cpath d='M11 11 L17 17 M17 11 L11 17' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 14 14, pointer`
             }}
           />
+
+          {/* Botones de navegación (Flechas izquierda/derecha) */}
+          {filteredPhotos.findIndex(p => p.name === activeLightboxPhoto.name) > 0 && (
+            <button
+              onClick={handlePrevPhoto}
+              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/55 backdrop-blur-xs text-white rounded-full border border-white/20 transition-all hover:bg-black/75 cursor-pointer z-70 flex items-center justify-center shadow-lg"
+              title="Foto anterior"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+          )}
+
+          {filteredPhotos.findIndex(p => p.name === activeLightboxPhoto.name) < filteredPhotos.length - 1 && (
+            <button
+              onClick={handleNextPhoto}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/55 backdrop-blur-xs text-white rounded-full border border-white/20 transition-all hover:bg-black/75 cursor-pointer z-70 flex items-center justify-center shadow-lg"
+              title="Siguiente foto"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          )}
 
           {/* Barra de herramientas inferior del Lightbox */}
           <div 
