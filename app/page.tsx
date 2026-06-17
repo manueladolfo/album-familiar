@@ -723,6 +723,7 @@ export default function Home() {
 
   // Guardar la anécdota personal y crónica del diario
   const handleSaveStory = async (photoName: string, chronicleText: string, anecdoteText: string) => {
+    const isEdit = !!photoStories[photoName]?.anecdote;
     const updatedStories = { ...photoStories };
     updatedStories[photoName] = {
       chronicle: chronicleText,
@@ -745,7 +746,9 @@ export default function Home() {
     const meta = photoMetadata[photoName];
     const cleanName = photoName.split("_").slice(1).join("_").replace(/\.webp$/, "");
     const photoTitle = (meta as any)?.title || cleanName || "un recuerdo familiar";
-    const notifMsg = `✍️ Se narró la historia de "${photoTitle}".`;
+    const notifMsg = isEdit 
+      ? `✍️ Se modificó la historia de "${photoTitle}".`
+      : `✍️ Se narró la historia de "${photoTitle}".`;
     window.dispatchEvent(new CustomEvent("new-notification", { detail: { message: notifMsg, photoName: photoName } }));
   };
 
