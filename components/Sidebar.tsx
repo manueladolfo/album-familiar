@@ -551,15 +551,25 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
 
   return (
     <>
-      {/* Filtro SVG para hacer transparente el fondo negro del logo invertido en modo oscuro */}
+      {/* Filtros SVG para colorear la silueta y hacer transparente el fondo blanco del logo */}
       <svg width="0" height="0" className="absolute pointer-events-none" style={{ position: "absolute", width: 0, height: 0 }}>
         <defs>
-          <filter id="remove-black-bg">
+          {/* Filtro para modo claro: silueta azul oscuro (#0d1b2a) y fondo transparente */}
+          <filter id="logo-modo-claro">
             <feColorMatrix type="matrix" values="
-              1 0 0 0 0
-              0 1 0 0 0
-              0 0 1 0 0
-              1 1 1 0 0
+              0 0 0 0 0.05
+              0 0 0 0 0.11
+              0 0 0 0 0.16
+              -0.333 -0.333 -0.333 0 1
+            "/>
+          </filter>
+          {/* Filtro para modo oscuro: silueta crema claro (#FFFDF5) y fondo transparente */}
+          <filter id="logo-modo-oscuro">
+            <feColorMatrix type="matrix" values="
+              0 0 0 0 1.0
+              0 0 0 0 0.99
+              0 0 0 0 0.96
+              -0.333 -0.333 -0.333 0 1
             "/>
           </filter>
         </defs>
@@ -584,7 +594,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
             <img
               src="/logo-familiar-transparente.png"
               alt="Álbum Familiar"
-              className="w-28 sm:w-32 h-auto object-contain bg-transparent mix-blend-multiply dark:mix-blend-normal dark:[filter:url(#remove-black-bg)_invert(1)_sepia(0.3)_brightness(1.2)] select-none"
+              className="w-28 sm:w-32 h-auto object-contain bg-transparent [filter:url(#logo-modo-claro)] dark:[filter:url(#logo-modo-oscuro)] select-none"
             />
 
             {/* Renderizado de corazones flotantes */}
