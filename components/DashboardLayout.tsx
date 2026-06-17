@@ -164,14 +164,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Primer pull de datos al montar la aplicación
     pullRemoteDataToLocal();
 
-    // Configurar Polling periódico de datos (cada 10 segundos) como fallback 100% confiable
+    // Configurar Polling periódico de datos (cada 5 minutos) como fallback pasivo de seguridad
     const interval = setInterval(() => {
       pullRemoteDataToLocal();
       syncPendingRotations();
-    }, 10000);
+    }, 300000);
 
     // Configurar suscripción de tiempo real a la tabla 'albums'
-    const channel = supabase
+    const channelAlbums = supabase
       .channel("db-albums-realtime")
       .on(
         "postgres_changes",
@@ -183,9 +183,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )
       .subscribe();
 
+    // Configurar suscripción de tiempo real a la tabla 'photos'
+    const channelPhotos = supabase
+      .channel("db-photos-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "photos" },
+        (payload) => {
+          console.log("Cambio detectado en base de datos de photos:", payload);
+          pullRemoteDataToLocal();
+        }
+      )
+      .subscribe();
+
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channelAlbums);
+      supabase.removeChannel(channelPhotos);
     };
   }, []);
 
