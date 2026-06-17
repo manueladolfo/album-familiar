@@ -560,7 +560,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
               0 0 0 0 0.05
               0 0 0 0 0.11
               0 0 0 0 0.16
-              -0.333 -0.333 -0.333 0 1
+              -3 -3 -3 0 9
             "/>
           </filter>
           {/* Filtro para modo oscuro: silueta crema claro (#FFFDF5) y fondo transparente */}
@@ -569,7 +569,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
               0 0 0 0 1.0
               0 0 0 0 0.99
               0 0 0 0 0.96
-              -0.333 -0.333 -0.333 0 1
+              -3 -3 -3 0 9
             "/>
           </filter>
         </defs>
@@ -592,7 +592,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
             className="flex-1 flex items-center justify-center bg-transparent relative"
           >
             <img
-              src="/logo-familiar-transparente-v3.png?v=3"
+              src="/logo-familiar-transparente-v3.png?v=4"
               alt="Álbum Familiar"
               className="w-30 sm:w-34 h-auto object-contain bg-transparent [filter:url(#logo-modo-claro)] dark:[filter:url(#logo-modo-oscuro)] select-none"
             />
