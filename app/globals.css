@@ -3,13 +3,26 @@
 :root {
   --background: #FFFDF5;
   --foreground: #0d1b2a;
+  --brand-navy: #0d1b2a;
+  --brand-cream: #FFFDF5;
+  --brand-timber: #d4a373;
+  --brand-sage: #e9edc9;
+}
+
+.dark {
+  --background: #090e17;
+  --foreground: #f8fafc;
+  --brand-navy: #f8fafc;
+  --brand-cream: #0f172a;
+  --brand-timber: #e2a86f;
+  --brand-sage: #1e293b;
 }
 
 @theme inline {
-  --color-brand-navy: #0d1b2a;
-  --color-brand-cream: #FFFDF5;
-  --color-brand-timber: #d4a373;
-  --color-brand-sage: #e9edc9;
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-timber: var(--brand-timber);
+  --color-brand-sage: var(--brand-sage);
   --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -17,6 +30,7 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 @keyframes floatHeart {

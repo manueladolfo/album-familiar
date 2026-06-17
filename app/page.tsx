@@ -781,28 +781,6 @@ export default function Home() {
             Explora tus recuerdos a través de colecciones con música o gestiona los rostros de tus seres queridos.
           </p>
         </div>
-        <div className="flex flex-col gap-3 w-full md:w-auto md:min-w-[280px]">
-          <div className="px-4 py-2.5 bg-brand-cream border border-brand-navy/10 rounded-xs flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-            <p className="text-[11px] font-medium text-brand-navy/80">{statusMessage}</p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={seedAllExamples}
-              className="flex-1 py-2 px-3 bg-brand-navy text-brand-cream text-xs font-semibold rounded-xs hover:bg-brand-navy/90 transition-all cursor-pointer text-center"
-            >
-              Sembrar Ejemplos
-            </button>
-            {importedPhotos.length > 0 && (
-              <button
-                onClick={clearLocalData}
-                className="py-2 px-3 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy text-xs font-medium rounded-xs transition-all cursor-pointer text-center"
-              >
-                Limpiar
-              </button>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Retroalimentación */}
@@ -1155,22 +1133,6 @@ export default function Home() {
                         <span>✍️</span> Con historia
                       </div>
                     )}
-
-                    {/* Botón Mover a Papelera siempre visible en móvil, y en hover en web */}
-                    <div className="absolute top-3 right-3 z-30 bg-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveToTrashFromHome(photo.name);
-                        }}
-                        className="p-1.5 bg-black/55 backdrop-blur-xs border border-red-500/20 text-red-400 rounded-xs transition-all hover:bg-red-500/30 cursor-pointer flex items-center justify-center"
-                        title="Mover a la papelera"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
 
                     {/* Hover overlay translúcido con desenfoque de cristal */}
                     <div className="absolute inset-0 bg-black/45 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity duration-350 flex flex-col justify-end p-4 z-10">

@@ -26,6 +26,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [showConnectionError, setShowConnectionError] = useState<boolean>(false);
   const [isLocalMode, setIsLocalMode] = useState<boolean>(false);
+  const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -371,6 +387,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+
+      {/* Botón Volver Arriba */}
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-40 p-3 bg-brand-navy text-brand-cream hover:bg-brand-navy/90 border border-brand-cream/10 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 cursor-pointer animate-in fade-in slide-in-from-bottom-4"
+          title="Volver al inicio"
+        >
+          <svg className="w-5.5 h-5.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+          </svg>
+        </button>
+      )}
 
       {/* Modal rojo de conexión interrumpida */}
       {showConnectionError && (

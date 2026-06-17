@@ -2,15 +2,31 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLocalMode, setIsLocalMode] = useState<boolean>(false);
+  const [supabaseStatus, setSupabaseStatus] = useState<'online' | 'offline' | 'error'>('online');
+  const [supabaseError, setSupabaseError] = useState<string>('');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [showStatusTooltip, setShowStatusTooltip] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    
+    // Tema inicial
+    const savedTheme = localStorage.getItem("family_album_theme") as 'light' | 'dark' | null;
+    const initialTheme = savedTheme || 'light';
+    setTheme(initialTheme);
+    if (initialTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
     const checkLocalMode = () => {
       setIsLocalMode(localStorage.getItem("family_album_local_mode_active") === "true");
     };
@@ -20,6 +36,58 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
       window.removeEventListener("local-mode-changed", checkLocalMode);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const checkStatus = async () => {
+      const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
+      if (localActive) {
+        setSupabaseStatus('offline');
+        setSupabaseError('Operando en MODO LOCAL (Offline).');
+        return;
+      }
+      try {
+        const { error } = await supabase.from('albums').select('id').limit(1);
+        if (error) {
+          setSupabaseStatus('error');
+          setSupabaseError(error.message);
+        } else {
+          setSupabaseStatus('online');
+          setSupabaseError('');
+        }
+      } catch (err: any) {
+        setSupabaseStatus('error');
+        setSupabaseError(err?.message || 'Error de conexión.');
+      }
+    };
+
+    checkStatus();
+    
+    const handleConnError = () => {
+      setSupabaseStatus('error');
+      setSupabaseError('Conexión perdida con el servidor.');
+    };
+
+    window.addEventListener("local-mode-changed", checkStatus);
+    window.addEventListener("supabase-connection-error", handleConnError);
+
+    return () => {
+      window.removeEventListener("local-mode-changed", checkStatus);
+      window.removeEventListener("supabase-connection-error", handleConnError);
+    };
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    localStorage.setItem("family_album_theme", nextTheme);
+    if (nextTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   // Búsqueda
   const [searchVal, setSearchVal] = useState<string>("");
@@ -205,7 +273,7 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
           </button>
         )}
         <h2 className="text-sm md:text-lg font-medium text-brand-navy tracking-tight truncate max-w-[150px] sm:max-w-xs md:max-w-none">
-          {title}
+          {title === "Inicio" ? "" : title}
         </h2>
       </div>
 
@@ -237,6 +305,49 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
             className="w-64 pl-9 pr-2 py-1.5 border-b border-brand-navy/10 bg-transparent text-xs text-brand-navy placeholder-brand-navy/40 focus:outline-none focus:border-brand-navy transition-all"
           />
         </div>
+
+        {/* Indicador de conexión de Supabase */}
+        <div 
+          className="relative bg-transparent flex items-center"
+          onMouseEnter={() => setShowStatusTooltip(true)}
+          onMouseLeave={() => setShowStatusTooltip(false)}
+        >
+          <button
+            onClick={() => setShowStatusTooltip(!showStatusTooltip)}
+            className={`w-2.5 h-2.5 rounded-full transition-all focus:outline-none cursor-pointer ${
+              supabaseStatus === 'online'
+                ? 'bg-green-500 shadow-[0_0_8px_#22c55e]'
+                : 'bg-red-500 shadow-[0_0_8px_#ef4444]'
+            }`}
+            aria-label="Estado de conexión"
+          />
+          {showStatusTooltip && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-brand-cream border border-brand-navy/15 rounded-xs p-2 shadow-lg z-50 text-[11px] text-left animate-in fade-in slide-in-from-top-1 duration-150">
+              {supabaseStatus === 'online' ? (
+                <p className="text-green-700 font-semibold bg-transparent">● Supabase está online y correcto</p>
+              ) : (
+                <p className="text-red-650 font-semibold bg-transparent">● Supabase: {supabaseError || "Sin conexión"}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Botón de Modo Claro / Modo Oscuro */}
+        <button
+          onClick={toggleTheme}
+          className="p-1.5 text-brand-navy/70 hover:text-brand-navy hover:bg-brand-navy/5 rounded-xs transition-all cursor-pointer focus:outline-none"
+          title={theme === 'light' ? "Modo oscuro" : "Modo claro"}
+        >
+          {theme === 'light' ? (
+            <svg className="w-5.5 h-5.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+            </svg>
+          ) : (
+            <svg className="w-5.5 h-5.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m0 13.5V21M4.22 4.22l1.59 1.59m12.38 12.38l1.59 1.59M3 12h2.25m13.5 0H21m-16.78 6.78l1.59-1.59M16.22 7.78l1.59-1.59M12 7.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9z" />
+            </svg>
+          )}
+        </button>
 
         {/* Icono de Campana de Notificaciones */}
         <div className="relative bg-transparent" ref={notifRef}>
