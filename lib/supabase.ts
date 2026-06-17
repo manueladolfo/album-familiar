@@ -127,14 +127,16 @@ export async function saveRotationsToSupabase(rotations: Record<string, number>)
     for (const [photoName, rotation] of Object.entries(rotations)) {
       const photoId = getPhotoIdFromName(photoName);
       if (isValidUUID(photoId)) {
-        await supabase
+        const { error } = await supabase
           .from("photos")
           .update({ rotation: rotation })
           .eq("id", photoId);
+        if (error) throw error;
       }
     }
   } catch (err) {
     console.error("Error al guardar las rotaciones en Supabase:", err);
+    throw err;
   }
 }
 
@@ -168,25 +170,29 @@ export async function saveStoriesToSupabase(stories: Record<string, { chronicle:
   const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
   if (localActive) return;
   try {
-    const { data: existing } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from("albums")
       .select("id")
       .eq("name", "__system_config_stories__")
       .limit(1);
+    if (selectError) throw selectError;
 
     const configJson = JSON.stringify(stories);
     if (existing && existing.length > 0) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("albums")
         .update({ cover_url: configJson })
         .eq("id", existing[0].id);
+      if (updateError) throw updateError;
     } else {
-      await supabase
+      const { error: insertError } = await supabase
         .from("albums")
         .insert({ name: "__system_config_stories__", cover_url: configJson });
+      if (insertError) throw insertError;
     }
   } catch (err) {
     console.error("Error al guardar las historias en Supabase:", err);
+    throw err;
   }
 }
 
@@ -221,25 +227,29 @@ export async function saveNotificationsToSupabase(notifications: NotificationIte
   const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
   if (localActive) return;
   try {
-    const { data: existing } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from("albums")
       .select("id")
       .eq("name", "__system_config_notifications__")
       .limit(1);
+    if (selectError) throw selectError;
 
     const configJson = JSON.stringify(notifications);
     if (existing && existing.length > 0) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("albums")
         .update({ cover_url: configJson })
         .eq("id", existing[0].id);
+      if (updateError) throw updateError;
     } else {
-      await supabase
+      const { error: insertError } = await supabase
         .from("albums")
         .insert({ name: "__system_config_notifications__", cover_url: configJson });
+      if (insertError) throw insertError;
     }
   } catch (err) {
     console.error("Error al guardar las notificaciones en Supabase:", err);
+    throw err;
   }
 }
 
@@ -266,25 +276,29 @@ export async function saveMetadataToSupabase(metadata: Record<string, any>) {
   const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
   if (localActive) return;
   try {
-    const { data: existing } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from("albums")
       .select("id")
       .eq("name", "__system_config_metadata__")
       .limit(1);
+    if (selectError) throw selectError;
 
     const configJson = JSON.stringify(metadata);
     if (existing && existing.length > 0) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("albums")
         .update({ cover_url: configJson })
         .eq("id", existing[0].id);
+      if (updateError) throw updateError;
     } else {
-      await supabase
+      const { error: insertError } = await supabase
         .from("albums")
         .insert({ name: "__system_config_metadata__", cover_url: configJson });
+      if (insertError) throw insertError;
     }
   } catch (err) {
     console.error("Error al guardar los metadatos en Supabase:", err);
+    throw err;
   }
 }
 

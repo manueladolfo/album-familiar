@@ -555,25 +555,32 @@ export default function Home() {
     const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
     if (!localActive) {
       try {
-        const { data: existing } = await supabase
+        const { data: existing, error: selectError } = await supabase
           .from("albums")
           .select("id")
           .eq("name", "__system_config__")
           .limit(1);
+        if (selectError) throw selectError;
 
         const configJson = JSON.stringify({ people: newPeople, taggedPhotos: newTaggedPhotos });
         if (existing && existing.length > 0) {
-          await supabase
+          const { error: updateError } = await supabase
             .from("albums")
             .update({ cover_url: configJson })
             .eq("id", existing[0].id);
+          if (updateError) throw updateError;
         } else {
-          await supabase
+          const { error: insertError } = await supabase
             .from("albums")
             .insert({ name: "__system_config__", cover_url: configJson });
+          if (insertError) throw insertError;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error al guardar la configuración de personas en Supabase:", err);
+        setFeedback({
+          type: "error",
+          text: `Fallo al sincronizar con Supabase: ${err.message || err}`
+        });
       }
     }
   };
@@ -713,8 +720,16 @@ export default function Home() {
     };
     setPhotoStories(updatedStories);
     localStorage.setItem("family_album_photo_stories", JSON.stringify(updatedStories));
-    await saveStoriesToSupabase(updatedStories);
-    setFeedback({ type: "success", text: "Anécdota del diario guardada correctamente." });
+    try {
+      await saveStoriesToSupabase(updatedStories);
+      setFeedback({ type: "success", text: "Anécdota del diario guardada correctamente." });
+    } catch (err: any) {
+      console.error("Fallo al guardar anécdota en Supabase:", err);
+      setFeedback({
+        type: "error",
+        text: `Fallo al sincronizar anécdota con Supabase: ${err.message || err}`
+      });
+    }
 
     // Emitir notificación a la campana del Navbar
     const meta = photoMetadata[photoName];
@@ -891,11 +906,20 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Retroalimentación */}
+      {/* Retroalimentación Flotante y Premium (Toast) */}
       {feedback && (
-        <div className="p-3 bg-brand-cream border border-brand-navy/25 text-brand-navy text-xs rounded-xs font-medium flex justify-between items-center animate-in fade-in duration-200">
-          <span>{feedback.text}</span>
-          <button onClick={() => setFeedback(null)} className="text-xs hover:opacity-70">✕</button>
+        <div className={`fixed bottom-6 right-6 z-100 max-w-sm w-[calc(100vw-3rem)] p-4 border rounded-xs shadow-xl flex justify-between items-start gap-4 animate-in slide-in-from-bottom-5 duration-200 ${
+          feedback.type === "error" 
+            ? "bg-red-50/95 border-red-200 text-red-800 backdrop-blur-xs" 
+            : "bg-green-50/95 border-green-200 text-green-800 backdrop-blur-xs"
+        }`}>
+          <div className="space-y-1 bg-transparent">
+            <h5 className="text-[9px] font-bold uppercase tracking-wider">
+              {feedback.type === "error" ? "⚠️ Error de Sincronización" : "✅ Operación Exitosa"}
+            </h5>
+            <p className="text-xs font-semibold leading-relaxed">{feedback.text}</p>
+          </div>
+          <button onClick={() => setFeedback(null)} className="text-xs font-bold hover:opacity-75 cursor-pointer flex-shrink-0">✕</button>
         </div>
       )}
 
