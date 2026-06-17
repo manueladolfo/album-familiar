@@ -429,46 +429,22 @@ export default function Home() {
       };
 
       const cleanLocalMeta = cleanMeta(localMeta);
+      const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
 
-      if (remoteMeta) {
+      if (!localActive && remoteMeta) {
         const cleanRemoteMeta = cleanMeta(remoteMeta);
-        const mergedMeta = { ...cleanRemoteMeta };
-        Object.keys(cleanLocalMeta).forEach((key) => {
-          if (!mergedMeta[key]) {
-            mergedMeta[key] = cleanLocalMeta[key];
-          } else {
-            const mergedTags = Array.from(new Set([
-              ...(mergedMeta[key].tags || []),
-              ...(cleanLocalMeta[key].tags || [])
-            ]));
-            mergedMeta[key] = {
-              tags: mergedTags,
-              location: cleanLocalMeta[key].location || mergedMeta[key].location,
-              latitude: cleanLocalMeta[key].latitude !== undefined && cleanLocalMeta[key].latitude !== null ? cleanLocalMeta[key].latitude : mergedMeta[key].latitude,
-              longitude: cleanLocalMeta[key].longitude !== undefined && cleanLocalMeta[key].longitude !== null ? cleanLocalMeta[key].longitude : mergedMeta[key].longitude,
-            };
-          }
-        });
-        setPhotoMetadata(mergedMeta);
-        localStorage.setItem("family_album_photo_metadata", JSON.stringify(mergedMeta));
-        if (Object.keys(mergedMeta).length > Object.keys(remoteMeta).length) {
-          saveMetadataToSupabase(mergedMeta);
-        }
+        setPhotoMetadata(cleanRemoteMeta);
+        localStorage.setItem("family_album_photo_metadata", JSON.stringify(cleanRemoteMeta));
       } else {
         setPhotoMetadata(cleanLocalMeta);
-        localStorage.setItem("family_album_photo_metadata", JSON.stringify(cleanLocalMeta));
       }
 
       const remoteStories = await loadStoriesFromSupabase();
       const localStoriesJson = localStorage.getItem("family_album_photo_stories") || "{}";
       const localStories = JSON.parse(localStoriesJson);
-      if (remoteStories) {
-        const mergedStories = { ...remoteStories, ...localStories };
-        setPhotoStories(mergedStories);
-        localStorage.setItem("family_album_photo_stories", JSON.stringify(mergedStories));
-        if (Object.keys(mergedStories).length > Object.keys(remoteStories).length) {
-          saveStoriesToSupabase(mergedStories);
-        }
+      if (!localActive && remoteStories) {
+        setPhotoStories(remoteStories);
+        localStorage.setItem("family_album_photo_stories", JSON.stringify(remoteStories));
       } else {
         setPhotoStories(localStories);
       }
@@ -476,13 +452,9 @@ export default function Home() {
       const remoteRots = await loadRotationsFromSupabase();
       const localRotsJson = localStorage.getItem("family_album_photo_rotations") || "{}";
       const localRots = JSON.parse(localRotsJson);
-      if (remoteRots) {
-        const mergedRots = { ...remoteRots, ...localRots };
-        setRotations(mergedRots);
-        localStorage.setItem("family_album_photo_rotations", JSON.stringify(mergedRots));
-        if (Object.keys(mergedRots).length > Object.keys(remoteRots).length) {
-          saveRotationsToSupabase(mergedRots);
-        }
+      if (!localActive && remoteRots) {
+        setRotations(remoteRots);
+        localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
       } else {
         setRotations(localRots);
       }
