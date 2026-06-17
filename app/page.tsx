@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase, loadRotationsFromSupabase, saveStoriesToSupabase, loadStoriesFromSupabase } from "@/lib/supabase";
+import { supabase, loadRotationsFromSupabase, saveStoriesToSupabase, loadStoriesFromSupabase, loadMetadataFromSupabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { filterPhotos, PhotoMetadata, PhotoItem } from "@/lib/search";
 import { isValidUUID } from "@/lib/uuid";
@@ -357,8 +357,14 @@ export default function Home() {
         console.error("Error al cargar fotos de la biblioteca:", err);
       }
 
-      const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
-      setPhotoMetadata(JSON.parse(metadataJson));
+      const remoteMeta = await loadMetadataFromSupabase();
+      if (remoteMeta) {
+        setPhotoMetadata(remoteMeta);
+        localStorage.setItem("family_album_photo_metadata", JSON.stringify(remoteMeta));
+      } else {
+        const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
+        setPhotoMetadata(JSON.parse(metadataJson));
+      }
 
       const remoteStories = await loadStoriesFromSupabase();
       if (remoteStories) {

@@ -164,6 +164,51 @@ export async function loadNotificationsFromSupabase(): Promise<NotificationItem[
   return null;
 }
 
+export async function saveMetadataToSupabase(metadata: Record<string, any>) {
+  const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
+  if (localActive) return;
+  try {
+    const { data: existing } = await supabase
+      .from("albums")
+      .select("id")
+      .eq("name", "__system_config_metadata__")
+      .limit(1);
+
+    const configJson = JSON.stringify(metadata);
+    if (existing && existing.length > 0) {
+      await supabase
+        .from("albums")
+        .update({ cover_url: configJson })
+        .eq("id", existing[0].id);
+    } else {
+      await supabase
+        .from("albums")
+        .insert({ name: "__system_config_metadata__", cover_url: configJson });
+    }
+  } catch (err) {
+    console.error("Error al guardar los metadatos en Supabase:", err);
+  }
+}
+
+export async function loadMetadataFromSupabase(): Promise<Record<string, any> | null> {
+  const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
+  if (localActive) return null;
+  try {
+    const { data } = await supabase
+      .from("albums")
+      .select("cover_url")
+      .eq("name", "__system_config_metadata__")
+      .limit(1);
+
+    if (data && data.length > 0 && data[0].cover_url) {
+      return JSON.parse(data[0].cover_url);
+    }
+  } catch (err) {
+    console.error("Error al cargar los metadatos de Supabase:", err);
+  }
+  return null;
+}
+
 export async function syncLocalDataToSupabase() {
   const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
   if (localActive) return;
@@ -262,8 +307,94 @@ export async function syncLocalDataToSupabase() {
       localStorage.setItem("family_album_notifications", JSON.stringify(mergedNotifs));
     }
 
+    // 5. Sincronizar Metadatos (GPS y IA)
+    const localMetaJson = localStorage.getItem("family_album_photo_metadata");
+    if (localMetaJson) {
+      const localMeta = JSON.parse(localMetaJson);
+      const remoteMeta = await loadMetadataFromSupabase() || {};
+      
+      // Fusionar metadatos (priorizando los más completos)
+      const mergedMeta = { ...remoteMeta };
+      Object.keys(localMeta).forEach((key) => {
+        if (!mergedMeta[key]) {
+          mergedMeta[key] = localMeta[key];
+        } else {
+          // Fusionar tags y datos GPS/ubicación
+          const mergedTags = Array.from(new Set([
+            ...(mergedMeta[key].tags || []),
+            ...(localMeta[key].tags || [])
+          ]));
+          mergedMeta[key] = {
+            tags: mergedTags,
+            location: localMeta[key].location || mergedMeta[key].location,
+            latitude: localMeta[key].latitude !== undefined && localMeta[key].latitude !== null ? localMeta[key].latitude : mergedMeta[key].latitude,
+            longitude: localMeta[key].longitude !== undefined && localMeta[key].longitude !== null ? localMeta[key].longitude : mergedMeta[key].longitude,
+          };
+        }
+      });
+
+      await saveMetadataToSupabase(mergedMeta);
+      localStorage.setItem("family_album_photo_metadata", JSON.stringify(mergedMeta));
+    }
+
     console.log("Sincronización de datos completada con éxito.");
   } catch (err) {
     console.error("Error al sincronizar datos locales a Supabase:", err);
+  }
+}
+
+export async function pullRemoteDataToLocal() {
+  if (typeof window === "undefined") return;
+  const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
+  if (localActive) return;
+
+  try {
+    // 1. Descargar Historias
+    const remoteStories = await loadStoriesFromSupabase();
+    if (remoteStories) {
+      localStorage.setItem("family_album_photo_stories", JSON.stringify(remoteStories));
+    }
+
+    // 2. Descargar Rotaciones
+    const remoteRots = await loadRotationsFromSupabase();
+    if (remoteRots) {
+      localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
+    }
+
+    // 3. Descargar Notificaciones
+    const remoteNotifs = await loadNotificationsFromSupabase();
+    if (remoteNotifs) {
+      localStorage.setItem("family_album_notifications", JSON.stringify(remoteNotifs));
+    }
+
+    // 4. Descargar Personas/Tags
+    const { data: configData } = await supabase
+      .from("albums")
+      .select("cover_url")
+      .eq("name", "__system_config__")
+      .limit(1);
+
+    if (configData && configData.length > 0 && configData[0].cover_url) {
+      const config = JSON.parse(configData[0].cover_url);
+      if (config.people) {
+        localStorage.setItem("family_album_people", JSON.stringify(config.people));
+      }
+      if (config.taggedPhotos) {
+        localStorage.setItem("family_album_person_tags", JSON.stringify(config.taggedPhotos));
+      }
+    }
+
+    // 5. Descargar Metadatos (GPS e IA)
+    const remoteMeta = await loadMetadataFromSupabase();
+    if (remoteMeta) {
+      localStorage.setItem("family_album_photo_metadata", JSON.stringify(remoteMeta));
+    }
+
+    // Notificar eventos para redibujar la UI local
+    window.dispatchEvent(new CustomEvent("refresh-albums"));
+    window.dispatchEvent(new CustomEvent("photo-moved"));
+    window.dispatchEvent(new CustomEvent("local-mode-changed"));
+  } catch (err) {
+    console.error("Error al sincronizar datos remotos a local:", err);
   }
 }

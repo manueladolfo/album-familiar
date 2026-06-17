@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
-import { supabase, syncLocalDataToSupabase } from "@/lib/supabase";
+import { supabase, syncLocalDataToSupabase, pullRemoteDataToLocal } from "@/lib/supabase";
 
 interface AlbumItem {
   id: string;
@@ -146,6 +146,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       subscription.unsubscribe();
     };
   }, [pathname, router]);
+
+  // Sincronización en caliente y en tiempo real (Polling + Supabase Realtime)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const isLocalMode = localStorage.getItem("family_album_local_mode_active") === "true";
+    if (isLocalMode) return;
+
+    // Primer pull de datos al montar la aplicación
+    pullRemoteDataToLocal();
+
+    // Configurar Polling periódico de datos (cada 10 segundos) como fallback 100% confiable
+    const interval = setInterval(() => {
+      pullRemoteDataToLocal();
+    }, 10000);
+
+    // Configurar suscripción de tiempo real a la tabla 'albums'
+    const channel = supabase
+      .channel("db-albums-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "albums" },
+        (payload) => {
+          console.log("Cambio detectado en base de datos de albums:", payload);
+          pullRemoteDataToLocal();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Cerrar sidebar al cambiar de ruta
   useEffect(() => {

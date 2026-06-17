@@ -25,6 +25,8 @@ export interface PersonProfile {
 export interface PhotoMetadata {
   tags: string[];
   location?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 /**

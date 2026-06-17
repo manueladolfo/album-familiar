@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { supabase, isUserAdmin } from "@/lib/supabase";
+import { supabase, isUserAdmin, saveMetadataToSupabase, loadMetadataFromSupabase } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 
 import { analyzePhotoWithGemini, getReverseGeocoding } from "@/lib/search";
@@ -454,8 +454,18 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         metadata[photo.name] = {
           tags: tags.length > 0 ? tags : ["recuerdo", "familiar"],
           location: locationText || undefined,
+          latitude: photo.latitude || undefined,
+          longitude: photo.longitude || undefined,
         };
         localStorage.setItem("family_album_photo_metadata", JSON.stringify(metadata));
+
+        const isLocalMode = localStorage.getItem("family_album_local_mode_active") === "true";
+        if (!isLocalMode) {
+          const remoteMeta = await loadMetadataFromSupabase() || {};
+          const mergedMeta = { ...remoteMeta, ...metadata };
+          await saveMetadataToSupabase(mergedMeta);
+          localStorage.setItem("family_album_photo_metadata", JSON.stringify(mergedMeta));
+        }
 
         // Notificar cambio al sistema para recargar listados reactivamente
         window.dispatchEvent(new CustomEvent("photo-moved"));
@@ -546,7 +556,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
       }`}>
         {/* Header con Logo */}
         <div 
-          className="py-10 px-4 border-b border-brand-navy/10 bg-transparent flex items-center justify-between gap-2 relative overflow-visible"
+          className="py-10 px-4 border-b border-brand-navy/10 bg-transparent dark:bg-[#000000] flex items-center justify-between gap-2 relative overflow-visible"
           onMouseEnter={triggerHearts}
           onTouchStart={(e) => {
             // No prevenir comportamiento por defecto pero sí lanzar corazones

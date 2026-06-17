@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase, isUserAdmin, saveRotationsToSupabase, loadRotationsFromSupabase } from "@/lib/supabase";
+import { supabase, isUserAdmin, saveRotationsToSupabase, loadRotationsFromSupabase, saveMetadataToSupabase, loadMetadataFromSupabase } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 import exifr from "exifr";
@@ -518,8 +518,7 @@ export default function PhotosPage() {
     };
   }, []);
 
-  // Comprimir imagen usando Canvas en el cliente (max 500px, WebP)
-  const compressImage = (file: File): Promise<Blob> => {
+  const compressImage = (file: File, maxDim = 1200, quality = 0.85): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -536,7 +535,6 @@ export default function PhotosPage() {
 
           let width = img.width;
           let height = img.height;
-          const maxDim = 1200;
 
           if (width > height) {
             if (width > maxDim) {
@@ -563,7 +561,7 @@ export default function PhotosPage() {
               }
             },
             "image/webp",
-            0.90
+            quality
           );
         };
       };
@@ -593,9 +591,19 @@ export default function PhotosPage() {
       metadata[photoName] = {
         tags: tags.length > 0 ? tags : ["recuerdo", "familiar"],
         location: locationText || undefined,
+        latitude: lat !== null ? lat : undefined,
+        longitude: lon !== null ? lon : undefined,
       };
 
       localStorage.setItem("family_album_photo_metadata", JSON.stringify(metadata));
+      
+      const isLocalMode = localStorage.getItem("family_album_local_mode_active") === "true";
+      if (!isLocalMode) {
+        const remoteMeta = await loadMetadataFromSupabase() || {};
+        const mergedMeta = { ...remoteMeta, ...metadata };
+        await saveMetadataToSupabase(mergedMeta);
+        localStorage.setItem("family_album_photo_metadata", JSON.stringify(mergedMeta));
+      }
       
       // Notificar a los listados que cambie la UI
       window.dispatchEvent(new CustomEvent("photo-moved"));
@@ -632,7 +640,8 @@ export default function PhotosPage() {
         const fileExt = file.name.split(".").pop();
         const photoId = generateUUID();
 
-        const compressedBlob = await compressImage(file);
+        const compressedBlob = await compressImage(file, 1200, 0.85);
+        const compressedOriginalBlob = await compressImage(file, 2560, 0.85);
 
         // Convertir a Base64 de antemano para Gemini
         const base64Image: string = await new Promise((resolve, reject) => {
@@ -664,10 +673,11 @@ export default function PhotosPage() {
         if (!localActive) {
           // MODO ONLINE: Solo Supabase
           try {
-            const originalPath = `originals/${photoId}.${fileExt}`;
+            const originalPath = `originals/${photoId}.webp`;
             const { error: origError } = await supabase.storage
               .from("family-album")
-              .upload(originalPath, file, {
+              .upload(originalPath, compressedOriginalBlob, {
+                contentType: "image/webp",
                 cacheControl: "3600",
                 upsert: false,
               });
