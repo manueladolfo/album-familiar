@@ -441,7 +441,30 @@ export default function AlbumPage({ params }: PageProps) {
       await loadPeopleConfig();
 
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
-      setPhotoMetadata(JSON.parse(metadataJson));
+      try {
+        const meta = JSON.parse(metadataJson);
+        let changed = false;
+        Object.keys(meta).forEach((key) => {
+          if (meta[key]?.tags) {
+            const beforeLen = meta[key].tags.length;
+            meta[key].tags = meta[key].tags.filter(
+              (t: string) => !["recuerdo", "familiar", "recuerdo familiar", "foto", "imagen", "momento", "fotografía", "recuerdo familiar", "foto familiar"].includes(t.toLowerCase().trim())
+            );
+            if (meta[key].tags.length !== beforeLen) {
+              changed = true;
+            }
+          }
+        });
+        if (changed) {
+          localStorage.setItem("family_album_photo_metadata", JSON.stringify(meta));
+          setPhotoMetadata(meta);
+        } else {
+          setPhotoMetadata(meta);
+        }
+      } catch (e) {
+        console.error("Error al limpiar metadatos en álbum:", e);
+        setPhotoMetadata(JSON.parse(metadataJson));
+      }
 
       const remoteRots = await loadRotationsFromSupabase();
       if (remoteRots) {
@@ -567,26 +590,27 @@ export default function AlbumPage({ params }: PageProps) {
   };
 
   // Analizar foto en segundo plano con Gemini e IA y geolocalizar con Nominatim
-  const triggerAIEvaluation = async (photoName: string, base64Image: string, lat: number | null, lon: number | null) => {
+  const triggerAIEvaluation = async (photoName: string, base64Image: string, lat: number | null, lon: number | null, originalDateStr: string | null) => {
     const apiKey = localStorage.getItem("family_album_gemini_api_key");
-    if (!apiKey && !lat && !lon) return;
+    const hasMetadata = lat !== null && lon !== null && originalDateStr !== null;
 
     try {
-      let tags: string[] = [];
-      if (apiKey && base64Image) {
-        tags = await analyzePhotoWithGemini(base64Image, apiKey);
-      }
-
       let locationText = "";
       if (lat !== null && lon !== null) {
         locationText = await getReverseGeocoding(lat, lon);
+      }
+
+      let tags: string[] = [];
+      // Gemini solo realiza etiquetado de fecha y lugar si tiene metadatos (geolocalización y fecha)
+      if (hasMetadata && apiKey && base64Image) {
+        tags = await analyzePhotoWithGemini(base64Image, apiKey, locationText, originalDateStr);
       }
 
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       const metadata = JSON.parse(metadataJson);
 
       metadata[photoName] = {
-        tags: tags.length > 0 ? tags : ["recuerdo", "familiar"],
+        tags: tags,
         location: locationText || undefined,
         latitude: lat !== null ? lat : undefined,
         longitude: lon !== null ? lon : undefined,
@@ -648,20 +672,37 @@ export default function AlbumPage({ params }: PageProps) {
           reader.readAsDataURL(compressedBlob);
         });
 
-        // Extraer metadatos GPS de la imagen original usando exifr
+        // Extraer metadatos GPS y fecha de la imagen original usando exifr
         let latitude: number | null = null;
         let longitude: number | null = null;
+        let photoDateStr: string | null = null;
         try {
-          const gps = await exifr.gps(file);
-          if (gps) {
-            latitude = gps.latitude;
-            longitude = gps.longitude;
-            console.log("Coordenadas GPS extraídas con éxito:", latitude, longitude);
+          const exifData = await exifr.parse(file, ["DateTimeOriginal", "CreateDate", "latitude", "longitude"]);
+          if (exifData) {
+            latitude = exifData.latitude !== undefined ? exifData.latitude : null;
+            longitude = exifData.longitude !== undefined ? exifData.longitude : null;
+            const originalDate = exifData.DateTimeOriginal || exifData.CreateDate;
+            if (originalDate) {
+              photoDateStr = originalDate instanceof Date ? originalDate.toISOString() : String(originalDate);
+            }
           }
         } catch (exifErr: any) {
           const isUnknownFormat = exifErr?.message?.includes("Unknown file format");
           if (!isUnknownFormat) {
-            console.warn("No se encontraron metadatos GPS EXIF en esta foto:", exifErr);
+            console.warn("No se encontraron metadatos GPS o fecha EXIF en esta foto:", exifErr);
+          }
+        }
+
+        // Si exifr.parse no obtuvo lat/lon pero exifr.gps sí:
+        if (latitude === null || longitude === null) {
+          try {
+            const gps = await exifr.gps(file);
+            if (gps) {
+              latitude = gps.latitude;
+              longitude = gps.longitude;
+            }
+          } catch (gpsErr) {
+            console.warn("Error al extraer GPS con exifr.gps:", gpsErr);
           }
         }
 
@@ -713,7 +754,7 @@ export default function AlbumPage({ params }: PageProps) {
             if (dbError) throw dbError;
 
             successCount++;
-            triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude);
+            triggerAIEvaluation(thumbnailName, base64Image, latitude, longitude, photoDateStr);
           } catch (err: any) {
             console.error("Fallo al subir a Supabase en modo online:", err);
             const reason = err?.message || String(err);
@@ -750,7 +791,7 @@ export default function AlbumPage({ params }: PageProps) {
             localStorage.setItem("family_album_photo_mappings", JSON.stringify(localAlbumMappings));
 
             successCount++;
-            triggerAIEvaluation(localThumbnailName, base64Image, latitude, longitude);
+            triggerAIEvaluation(localThumbnailName, base64Image, latitude, longitude, photoDateStr);
           } catch (fallbackErr: any) {
             console.error("Fallo al guardar en LocalStorage:", fallbackErr);
             failedFiles.push({ name: file.name, reason: fallbackErr?.message || "Error de almacenamiento local" });
@@ -1077,10 +1118,18 @@ export default function AlbumPage({ params }: PageProps) {
                                 📍 {photoMetadata[photo.name].location}
                               </p>
                             )}
-                            {photoMetadata[photo.name].tags && photoMetadata[photo.name].tags.length > 0 && (
-                              <p className="text-[8px] text-brand-cream/60 italic truncate">
-                                🏷️ {photoMetadata[photo.name].tags.slice(0, 4).join(", ")}
-                              </p>
+                            {photoMetadata[photo.name].tags && (
+                              (() => {
+                                const filtered = photoMetadata[photo.name].tags.filter(
+                                  (t: string) => !["recuerdo", "familiar", "recuerdo familiar", "foto", "imagen", "momento", "fotografía", "recuerdo familiar", "foto familiar"].includes(t.toLowerCase().trim())
+                                );
+                                if (filtered.length === 0) return null;
+                                return (
+                                  <p className="text-[8px] text-brand-cream/60 italic truncate">
+                                    🏷️ {filtered.slice(0, 4).join(", ")}
+                                  </p>
+                                );
+                              })()
                             )}
                           </div>
                         )}

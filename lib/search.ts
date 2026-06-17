@@ -150,9 +150,20 @@ export function filterPhotos(
  * Llama a la API de Gemini para analizar el contenido visual de la imagen en base64
  * y generar una lista de etiquetas en español.
  */
-export async function analyzePhotoWithGemini(base64Data: string, apiKey: string): Promise<string[]> {
+export async function analyzePhotoWithGemini(
+  base64Data: string,
+  apiKey: string,
+  locationText?: string,
+  originalDateStr?: string
+): Promise<string[]> {
   try {
     const cleanBase64 = base64Data.split(",")[1] || base64Data;
+    
+    const formattedDate = originalDateStr ? new Date(originalDateStr).toLocaleDateString("es-ES", { month: "long", year: "numeric" }) : "";
+    const promptText = `Eres un asistente experto en análisis visual de fotografías familiares. Se te proporciona una foto tomada en: ${locationText || "Ubicación desconocida"} en la fecha: ${formattedDate || "Fecha de creación desconocida"}.
+Analiza la foto y genera exactamente entre 3 y 5 etiquetas cortas en español, separadas por comas, que describan y relacionen EXCLUSIVAMENTE el lugar y la fecha de la foto (por ejemplo, el nombre de la ciudad o país, estación del año, clima aparente, tipo de paisaje o evento local deducible de la fecha o lugar).
+PROHIBIDO usar etiquetas genéricas como 'recuerdo', 'familiar', 'foto', 'imagen' o 'momento'. Devuelve ÚNICAMENTE las etiquetas separadas por comas, sin explicaciones.`;
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
@@ -165,7 +176,7 @@ export async function analyzePhotoWithGemini(base64Data: string, apiKey: string)
             {
               parts: [
                 {
-                  text: "Eres un asistente experto en análisis visual de fotografías familiares. Analiza esta imagen con detalle y genera exactamente entre 5 y 8 etiquetas cortas y específicas en español, separadas por comas. Las etiquetas deben describir elementos concretos y únicos de ESTA foto en particular. Incluye: personas visibles (ej: pareja, bebé, niños, grupo), actividad o acción (ej: cocinando, paseando, celebrando, abrazándose), lugar o escenario concreto (ej: playa, cocina, puerto, montaña, terraza), objetos destacados (ej: flores, gorra, vestido de novia, coche), emociones percibidas (ej: alegría, ternura, diversión), y momento del día o clima si es evidente (ej: atardecer, día soleado). PROHIBIDO usar etiquetas genéricas como 'recuerdo', 'familiar', 'foto', 'imagen' o 'momento'. Sé creativo y descriptivo. Devuelve ÚNICAMENTE la lista de etiquetas separadas por comas, sin explicaciones."
+                  text: promptText
                 },
                 {
                   inlineData: {

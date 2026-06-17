@@ -360,21 +360,38 @@ export default function Home() {
       const remoteMeta = await loadMetadataFromSupabase();
       const localMetaJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       const localMeta = JSON.parse(localMetaJson);
+
+      const cleanMeta = (meta: any) => {
+        if (!meta) return meta;
+        const clean = { ...meta };
+        Object.keys(clean).forEach((key) => {
+          if (clean[key]?.tags) {
+            clean[key].tags = clean[key].tags.filter(
+              (t: string) => !["recuerdo", "familiar", "recuerdo familiar", "foto", "imagen", "momento", "fotografía", "recuerdo familiar", "foto familiar"].includes(t.toLowerCase().trim())
+            );
+          }
+        });
+        return clean;
+      };
+
+      const cleanLocalMeta = cleanMeta(localMeta);
+
       if (remoteMeta) {
-        const mergedMeta = { ...remoteMeta };
-        Object.keys(localMeta).forEach((key) => {
+        const cleanRemoteMeta = cleanMeta(remoteMeta);
+        const mergedMeta = { ...cleanRemoteMeta };
+        Object.keys(cleanLocalMeta).forEach((key) => {
           if (!mergedMeta[key]) {
-            mergedMeta[key] = localMeta[key];
+            mergedMeta[key] = cleanLocalMeta[key];
           } else {
             const mergedTags = Array.from(new Set([
               ...(mergedMeta[key].tags || []),
-              ...(localMeta[key].tags || [])
+              ...(cleanLocalMeta[key].tags || [])
             ]));
             mergedMeta[key] = {
               tags: mergedTags,
-              location: localMeta[key].location || mergedMeta[key].location,
-              latitude: localMeta[key].latitude !== undefined && localMeta[key].latitude !== null ? localMeta[key].latitude : mergedMeta[key].latitude,
-              longitude: localMeta[key].longitude !== undefined && localMeta[key].longitude !== null ? localMeta[key].longitude : mergedMeta[key].longitude,
+              location: cleanLocalMeta[key].location || mergedMeta[key].location,
+              latitude: cleanLocalMeta[key].latitude !== undefined && cleanLocalMeta[key].latitude !== null ? cleanLocalMeta[key].latitude : mergedMeta[key].latitude,
+              longitude: cleanLocalMeta[key].longitude !== undefined && cleanLocalMeta[key].longitude !== null ? cleanLocalMeta[key].longitude : mergedMeta[key].longitude,
             };
           }
         });
@@ -384,7 +401,8 @@ export default function Home() {
           saveMetadataToSupabase(mergedMeta);
         }
       } else {
-        setPhotoMetadata(localMeta);
+        setPhotoMetadata(cleanLocalMeta);
+        localStorage.setItem("family_album_photo_metadata", JSON.stringify(cleanLocalMeta));
       }
 
       const remoteStories = await loadStoriesFromSupabase();
@@ -872,7 +890,9 @@ export default function Home() {
             const photoDate = (photo as any).created_at || (photo as any).createdAt || "";
             const photoYear = photoDate ? photoDate.split("-")[0] : "";
             const meta = photoMetadata[photo.name];
-            const aiTags = meta?.tags?.slice(0, 4) || [];
+            const aiTags = (meta?.tags || [])
+              .filter((t: string) => !["recuerdo", "familiar", "recuerdo familiar", "foto", "imagen", "momento", "fotografía", "recuerdo familiar", "foto familiar"].includes(t.toLowerCase().trim()))
+              .slice(0, 4);
             const aiLocation = meta?.location || "";
 
             return (
