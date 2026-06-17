@@ -1653,7 +1653,7 @@ export default function Home() {
                   value={newPersonName}
                   onChange={(e) => setNewPersonName(e.target.value)}
                   placeholder={newPersonIsGroup ? "Ej. Primos, Hermanos, Viajes..." : "Ej. Tía María, Firulais, Papá..."}
-                  className="w-full px-3 py-2 bg-transparent border border-brand-navy/20 focus:border-brand-navy text-xs rounded-xs outline-none text-brand-navy font-medium placeholder:text-brand-navy/30"
+                  className="w-full px-3 py-2 bg-transparent border border-brand-navy/20 focus:border-brand-navy text-base md:text-xs rounded-xs outline-none text-brand-navy font-medium placeholder:text-brand-navy/30"
                   maxLength={40}
                 />
               </div>
@@ -2026,7 +2026,7 @@ export default function Home() {
                     value={editingAnecdote}
                     onChange={(e) => setEditingAnecdote(e.target.value)}
                     placeholder="¿Quién estaba allí? ¿Qué música sonaba? Escribe aquí tu recuerdo sobre este día para conservarlo..."
-                    className="w-full h-64 md:h-72 px-3 py-2 bg-transparent border border-brand-navy/20 focus:border-brand-navy text-xs rounded-xs outline-none text-brand-navy font-medium placeholder:text-brand-navy/35 leading-relaxed resize-none scrollbar-thin"
+                    className="w-full h-40 md:h-72 px-3 py-2 bg-transparent border border-brand-navy/20 focus:border-brand-navy text-base md:text-xs rounded-xs outline-none text-brand-navy font-medium placeholder:text-brand-navy/35 leading-relaxed resize-none scrollbar-thin"
                     maxLength={1000}
                   />
                 </div>
