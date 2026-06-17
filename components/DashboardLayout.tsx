@@ -287,71 +287,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         localStorage.setItem("family_album_local_albums", JSON.stringify(defaultAlbums));
 
         // Sembrar fotos locales por defecto
-        const samplePhotos = [
-          {
-            id: "sample_picnic_1988",
-            name: "sample_picnic_1988.webp",
-            title: "Picnic familiar en la montaña",
-            url: "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop",
-            album_id: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
-            created_at: "1988-07-15T14:00:00Z",
-            status: "active"
-          },
-          {
-            id: "sample_cumpleanos_1991",
-            name: "sample_cumpleanos_1991.webp",
-            title: "Cumpleaños de la abuela Sofía",
-            url: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=800&auto=format&fit=crop",
-            album_id: "d3a60333-92b0-4f81-b51f-d748ad0a7203",
-            created_at: "1991-11-22T18:30:00Z",
-            status: "active"
-          },
-          {
-            id: "sample_playa_1985",
-            name: "sample_playa_1985.webp",
-            title: "Vacaciones de verano en la costa",
-            url: "https://images.unsplash.com/photo-1473496169904-658ba7c44d8a?w=800&auto=format&fit=crop",
-            album_id: "d1a60111-92b0-4f81-b51f-d748ad0a7201",
-            created_at: "1985-08-05T12:00:00Z",
-            status: "active"
-          },
-          {
-            id: "sample_boda_1980",
-            name: "sample_boda_1980.webp",
-            title: "Boda de los padres",
-            url: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop",
-            album_id: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
-            created_at: "1980-05-18T16:00:00Z",
-            status: "active"
-          },
-          {
-            id: "sample_navidad_1992",
-            name: "sample_navidad_1992.webp",
-            title: "Cena de Navidad en casa",
-            url: "https://images.unsplash.com/photo-1543257580-7269da773bf5?w=800&auto=format&fit=crop",
-            album_id: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
-            created_at: "1992-12-24T21:00:00Z",
-            status: "active"
-          },
-          {
-            id: "sample_bicicleta_1987",
-            name: "sample_bicicleta_1987.webp",
-            title: "Paseo dominical en bicicleta",
-            url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop",
-            album_id: "d1a60111-92b0-4f81-b51f-d748ad0a7201",
-            created_at: "1987-04-12T11:00:00Z",
-            status: "active"
-          },
-          {
-            id: "sample_trash_photo",
-            name: "sample_trash_photo.webp",
-            title: "Retrato antiguo",
-            url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&auto=format&fit=crop",
-            album_id: null,
-            created_at: "1994-06-05T10:00:00Z",
-            status: "trash"
-          }
-        ];
+        const samplePhotos: any[] = [];
         localStorage.setItem("family_album_local_photos", JSON.stringify(samplePhotos));
 
         // Sembrar mapeos de estados y álbumes

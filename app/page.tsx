@@ -29,6 +29,37 @@ interface PersonProfile {
   tags: string[]; // Claves para simular búsqueda inteligente por concordancia
 }
 
+const AvatarImage = ({ avatar, name, isGroup }: { avatar?: string; name: string; isGroup?: boolean }) => {
+  if (avatar) {
+    return (
+      <img
+        src={avatar}
+        alt={name}
+        className="w-full h-full object-cover"
+      />
+    );
+  }
+
+  // Fallback SVG silhouette
+  if (isGroup) {
+    return (
+      <div className="w-full h-full bg-brand-navy/5 flex items-center justify-center text-brand-navy/40">
+        <svg className="w-1/2 h-1/2" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94-3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+        </svg>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full bg-brand-navy/5 flex items-center justify-center text-brand-navy/40">
+      <svg className="w-1/2 h-1/2" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+      </svg>
+    </div>
+  );
+};
+
 interface LocalPhotoItem {
   name: string;
   url: string;
@@ -43,111 +74,62 @@ interface PhotoStory {
   anecdote: string;
 }
 
-const SAMPLE_PHOTOS: SamplePhoto[] = [
-  {
-    id: "sample_picnic_1988",
-    name: "sample_picnic_1988.webp",
-    title: "Picnic familiar en la montaña",
-    url: "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop",
-    albumId: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
-    createdAt: "1988-07-15T14:00:00Z"
-  },
-  {
-    id: "sample_cumpleanos_1991",
-    name: "sample_cumpleanos_1991.webp",
-    title: "Cumpleaños de la abuela Sofía",
-    url: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=800&auto=format&fit=crop",
-    albumId: "d3a60333-92b0-4f81-b51f-d748ad0a7203",
-    createdAt: "1991-11-22T18:30:00Z"
-  },
-  {
-    id: "sample_playa_1985",
-    name: "sample_playa_1985.webp",
-    title: "Vacaciones de verano en la costa",
-    url: "https://images.unsplash.com/photo-1473496169904-658ba7c44d8a?w=800&auto=format&fit=crop",
-    albumId: "d1a60111-92b0-4f81-b51f-d748ad0a7201",
-    createdAt: "1985-08-05T12:00:00Z"
-  },
-  {
-    id: "sample_boda_1980",
-    name: "sample_boda_1980.webp",
-    title: "Boda de los padres",
-    url: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop",
-    albumId: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
-    createdAt: "1980-05-18T16:00:00Z"
-  },
-  {
-    id: "sample_navidad_1992",
-    name: "sample_navidad_1992.webp",
-    title: "Cena de Navidad en casa",
-    url: "https://images.unsplash.com/photo-1543257580-7269da773bf5?w=800&auto=format&fit=crop",
-    albumId: "d2a60222-92b0-4f81-b51f-d748ad0a7202",
-    createdAt: "1992-12-24T21:00:00Z"
-  },
-  {
-    id: "sample_bicicleta_1987",
-    name: "sample_bicicleta_1987.webp",
-    title: "Paseo dominical en bicicleta",
-    url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop",
-    albumId: "d1a60111-92b0-4f81-b51f-d748ad0a7201",
-    createdAt: "1987-04-12T11:00:00Z"
-  }
-];
+const SAMPLE_PHOTOS: SamplePhoto[] = [];
 
 const DEFAULT_PEOPLE: PersonProfile[] = [
   {
     id: "p_ma_cynthia",
     name: "Manuel Adolfo y Cynthia",
-    avatar: "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=300&auto=format&fit=crop",
+    avatar: "",
     isGroup: true,
     tags: ["picnic", "boda", "navidad", "cynthia", "manuel adolfo"]
   },
   {
     id: "p_ap_manuel",
     name: "Ana Paula y Manuel",
-    avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300&auto=format&fit=crop",
+    avatar: "",
     isGroup: true,
     tags: ["bicicleta", "playa", "ana paula", "manuel"]
   },
   {
     id: "p_ma_manuel",
     name: "Manuel Adolfo y Manuel",
-    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300&auto=format&fit=crop",
+    avatar: "",
     isGroup: true,
     tags: ["picnic", "navidad", "manuel adolfo", "manuel"]
   },
   {
     id: "p_manuel_adolfo",
     name: "Manuel Adolfo",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop",
+    avatar: "",
     isGroup: false,
     tags: ["picnic", "boda", "navidad", "manuel adolfo"]
   },
   {
     id: "p_ana_paula",
     name: "Ana Paula",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&auto=format&fit=crop",
+    avatar: "",
     isGroup: false,
     tags: ["playa", "bicicleta", "ana paula"]
   },
   {
     id: "p_manuel",
     name: "Manuel",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop",
+    avatar: "",
     isGroup: false,
     tags: ["bicicleta", "playa", "picnic", "navidad", "manuel"]
   },
   {
     id: "p_cynthia",
     name: "Cynthia",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop",
+    avatar: "",
     isGroup: false,
     tags: ["boda", "navidad", "cynthia"]
   },
   {
     id: "p_dante",
     name: "Dante",
-    avatar: "https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?w=200&auto=format&fit=crop",
+    avatar: "",
     isGroup: false,
     tags: ["perro", "playa", "dante", "mascota"]
   }
@@ -810,48 +792,12 @@ export default function Home() {
       localStorage.setItem("family_album_local_albums", JSON.stringify(defaultAlbums));
       window.dispatchEvent(new CustomEvent("refresh-albums"));
 
-      const localPhotosJson = localStorage.getItem("family_album_local_photos") || "[]";
-      const localPhotos = JSON.parse(localPhotosJson);
+      localStorage.setItem("family_album_local_photos", "[]");
+      localStorage.setItem("family_album_photo_statuses", "{}");
+      localStorage.setItem("family_album_photo_mappings", "{}");
 
-      const localStatusMappingsJson = localStorage.getItem("family_album_photo_statuses") || "{}";
-      const localStatusMappings = JSON.parse(localStatusMappingsJson);
-
-      const localAlbumMappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
-      const localAlbumMappings = JSON.parse(localAlbumMappingsJson);
-
-      SAMPLE_PHOTOS.forEach((photo) => {
-        if (!localPhotos.some((p: LocalPhotoItem) => p.name === photo.name)) {
-          localPhotos.push({
-            name: photo.name,
-            url: photo.url,
-            created_at: photo.createdAt,
-            album_id: photo.albumId,
-            status: "active"
-          });
-        }
-        localStatusMappings[photo.name] = "active";
-        localAlbumMappings[photo.name] = photo.albumId;
-      });
-
-      // Foto en papelera
-      const trashPhotoName = "sample_trash_photo.webp";
-      if (!localPhotos.some((p: LocalPhotoItem) => p.name === trashPhotoName)) {
-        localPhotos.push({
-          name: trashPhotoName,
-          url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&auto=format&fit=crop",
-          created_at: "1994-06-05T10:00:00Z",
-          album_id: null,
-          status: "trash"
-        });
-      }
-      localStatusMappings[trashPhotoName] = "trash";
-
-      localStorage.setItem("family_album_local_photos", JSON.stringify(localPhotos));
-      localStorage.setItem("family_album_photo_statuses", JSON.stringify(localStatusMappings));
-      localStorage.setItem("family_album_photo_mappings", JSON.stringify(localAlbumMappings));
-
-      setImportedPhotos(SAMPLE_PHOTOS.map((p) => p.name).concat([trashPhotoName]));
-      setFeedback({ type: "success", text: "¡Se han sembrado todos los recuerdos familiares en la biblioteca!" });
+      setImportedPhotos([]);
+      setFeedback({ type: "success", text: "¡Se han sembrado los álbumes vacíos!" });
       window.dispatchEvent(new CustomEvent("photo-moved"));
     } catch {
       setFeedback({ type: "error", text: "Error al sembrar los recuerdos de ejemplo." });
@@ -1106,11 +1052,9 @@ export default function Home() {
                   onClick={() => setSelectedPerson(group)}
                   className="group relative aspect-video bg-brand-navy/5 rounded-xs overflow-hidden border border-brand-navy/10 hover:border-brand-navy/35 hover:-translate-y-0.5 shadow-sm transition-all duration-300 cursor-pointer"
                 >
-                  <img
-                    src={group.avatar}
-                    alt={group.name}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-102"
-                  />
+                  <div className="w-full h-full transition-transform duration-500 group-hover:scale-102 overflow-hidden">
+                    <AvatarImage avatar={group.avatar} name={group.name} isGroup={true} />
+                  </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/95 via-brand-navy/30 to-transparent flex flex-col justify-end p-4" />
                   
                   {/* Botón de eliminar en hover */}
@@ -1181,12 +1125,10 @@ export default function Home() {
                   className="group flex flex-col items-center gap-3 p-4 bg-brand-cream border border-brand-navy/10 hover:border-brand-navy/35 hover:shadow-md transition-all rounded-xs cursor-pointer text-center relative"
                 >
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border border-brand-navy/10 shadow-sm relative">
-                    <img
-                      src={person.avatar}
-                      alt={person.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-104"
-                    />
-                    <div className="absolute inset-0 bg-brand-navy/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="w-full h-full transition-transform duration-500 group-hover:scale-104 overflow-hidden">
+                      <AvatarImage avatar={person.avatar} name={person.name} isGroup={false} />
+                    </div>
+                    <div className="absolute inset-0 bg-brand-navy/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                   </div>
                   
                   {/* Botón de eliminar en hover */}
@@ -1506,12 +1448,8 @@ export default function Home() {
             {/* Header del Modal */}
             <div className="flex justify-between items-center pb-4 border-b border-brand-navy/10 bg-transparent">
               <div className="flex items-center gap-4 bg-transparent">
-                <div className="w-12 h-12 rounded-full overflow-hidden border border-brand-navy/15">
-                  <img
-                    src={selectedPerson.avatar}
-                    alt={selectedPerson.name}
-                    className="w-full h-full object-cover"
-                  />
+                <div className="w-12 h-12 rounded-full overflow-hidden border border-brand-navy/15 flex-shrink-0">
+                  <AvatarImage avatar={selectedPerson.avatar} name={selectedPerson.name} isGroup={selectedPerson.isGroup} />
                 </div>
                 <div className="bg-transparent">
                   <h3 className="text-base font-bold text-brand-navy uppercase tracking-wide">
@@ -1871,12 +1809,9 @@ export default function Home() {
 
                   const newId = `p_${Date.now()}`;
                   
-                  // Obtener la URL de la primera foto seleccionada (si hay)
                   let avatarUrl = newPersonCroppedAvatar;
                   if (!avatarUrl) {
-                    avatarUrl = newPersonIsGroup 
-                      ? "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop" // Imagen de grupo por defecto
-                      : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop"; // Avatar por defecto
+                    avatarUrl = "";
                     if (selectedPhotoNamesForNewPerson.length > 0) {
                       const firstPhoto = libraryPhotos.find((p) => p.name === selectedPhotoNamesForNewPerson[0]);
                       if (firstPhoto && firstPhoto.url) {
