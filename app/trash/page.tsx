@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase, saveRotationsToSupabase, loadRotationsFromSupabase } from "@/lib/supabase";
+import { supabase, saveRotationsToSupabase, loadRotationsFromSupabase, savePhotoRotation } from "@/lib/supabase";
 import { isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 import { filterPhotos, PersonProfile, PhotoMetadata, PhotoItem } from "@/lib/search";
@@ -1006,13 +1006,11 @@ export default function TrashPage() {
                 e.stopPropagation();
                 const currentRotation = rotations[activeLightboxPhoto.name] || 0;
                 const newRotation = (currentRotation + 90) % 360;
-                const updatedRotations = {
-                  ...rotations,
+                setRotations(prev => ({
+                  ...prev,
                   [activeLightboxPhoto.name]: newRotation,
-                };
-                setRotations(updatedRotations);
-                localStorage.setItem("family_album_photo_rotations", JSON.stringify(updatedRotations));
-                await saveRotationsToSupabase(updatedRotations);
+                }));
+                await savePhotoRotation(activeLightboxPhoto.name, newRotation);
               }}
               className="p-2.5 text-white hover:text-brand-sage transition-colors cursor-pointer flex items-center justify-center rounded-full hover:bg-white/10"
               title="Girar foto 90°"

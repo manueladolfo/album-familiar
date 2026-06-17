@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
-import { supabase, syncLocalDataToSupabase, pullRemoteDataToLocal } from "@/lib/supabase";
+import { supabase, syncLocalDataToSupabase, pullRemoteDataToLocal, syncPendingRotations } from "@/lib/supabase";
 
 interface AlbumItem {
   id: string;
@@ -90,13 +90,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setIsLocalMode(localStorage.getItem("family_album_local_mode_active") === "true");
     };
 
+    const handleOnline = () => {
+      console.log("Conexión de red restablecida. Iniciando sincronización de rotaciones...");
+      syncPendingRotations();
+    };
+
     window.addEventListener("supabase-connection-error", handleConnectionError);
     window.addEventListener("local-mode-changed", handleLocalModeChanged);
+    window.addEventListener("online", handleOnline);
 
     return () => {
       window.fetch = originalFetch;
       window.removeEventListener("supabase-connection-error", handleConnectionError);
       window.removeEventListener("local-mode-changed", handleLocalModeChanged);
+      window.removeEventListener("online", handleOnline);
     };
   }, []);
 
@@ -160,6 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Configurar Polling periódico de datos (cada 10 segundos) como fallback 100% confiable
     const interval = setInterval(() => {
       pullRemoteDataToLocal();
+      syncPendingRotations();
     }, 10000);
 
     // Configurar suscripción de tiempo real a la tabla 'albums'

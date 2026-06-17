@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { isValidUUID } from './uuid';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -21,26 +22,116 @@ export function isUserAdmin(email: string | null | undefined): boolean {
   return ADMIN_EMAILS.includes(email.toLowerCase().trim());
 }
 
+export function getPhotoIdFromName(name: string): string {
+  const nameWithoutExt = name.replace(/\.[^/.]+$/, "");
+  const cleanPhotoId = nameWithoutExt.split(".")[0];
+  return cleanPhotoId;
+}
+
+function addPendingRotation(photoName: string, rotation: number) {
+  if (typeof window === "undefined") return;
+  const pendingJson = localStorage.getItem("family_album_pending_rotations") || "{}";
+  const pending = JSON.parse(pendingJson);
+  pending[photoName] = rotation;
+  localStorage.setItem("family_album_pending_rotations", JSON.stringify(pending));
+}
+
+function removePendingRotation(photoName: string) {
+  if (typeof window === "undefined") return;
+  const pendingJson = localStorage.getItem("family_album_pending_rotations") || "{}";
+  const pending = JSON.parse(pendingJson);
+  delete pending[photoName];
+  localStorage.setItem("family_album_pending_rotations", JSON.stringify(pending));
+}
+
+export async function syncPendingRotations() {
+  if (typeof window === "undefined") return;
+  const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
+  if (localActive) return;
+
+  const pendingJson = localStorage.getItem("family_album_pending_rotations");
+  if (!pendingJson) return;
+
+  const pending = JSON.parse(pendingJson);
+  const keys = Object.keys(pending);
+  if (keys.length === 0) return;
+
+  console.log(`Intentando sincronizar ${keys.length} rotaciones pendientes...`);
+
+  for (const photoName of keys) {
+    const rotation = pending[photoName];
+    const photoId = getPhotoIdFromName(photoName);
+    if (isValidUUID(photoId)) {
+      try {
+        const { error } = await supabase
+          .from("photos")
+          .update({ rotation: rotation })
+          .eq("id", photoId);
+        
+        if (!error) {
+          removePendingRotation(photoName);
+          console.log(`Rotación sincronizada para ${photoName}: ${rotation}deg`);
+        } else {
+          throw error;
+        }
+      } catch (err) {
+        console.error(`Fallo al sincronizar rotación pendiente para ${photoName}:`, err);
+        break;
+      }
+    } else {
+      removePendingRotation(photoName);
+    }
+  }
+
+  window.dispatchEvent(new CustomEvent("photo-moved"));
+}
+
+export async function savePhotoRotation(photoName: string, rotation: number) {
+  // Guardar en local siempre
+  const localRotsJson = localStorage.getItem("family_album_photo_rotations") || "{}";
+  const localRots = JSON.parse(localRotsJson);
+  localRots[photoName] = rotation;
+  localStorage.setItem("family_album_photo_rotations", JSON.stringify(localRots));
+
+  const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
+  
+  if (localActive) {
+    addPendingRotation(photoName, rotation);
+    return;
+  }
+
+  try {
+    const photoId = getPhotoIdFromName(photoName);
+    if (isValidUUID(photoId)) {
+      const { error } = await supabase
+        .from("photos")
+        .update({ rotation: rotation })
+        .eq("id", photoId);
+      
+      if (error) {
+        throw error;
+      }
+      removePendingRotation(photoName);
+    }
+  } catch (err) {
+    console.warn("Fallo al guardar rotación en Supabase, agregando a cola de pendientes:", err);
+    addPendingRotation(photoName, rotation);
+    window.dispatchEvent(new CustomEvent("supabase-connection-error"));
+  }
+}
+
 export async function saveRotationsToSupabase(rotations: Record<string, number>) {
   const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
   if (localActive) return;
   try {
-    const { data: existing } = await supabase
-      .from("albums")
-      .select("id")
-      .eq("name", "__system_config_rotations__")
-      .limit(1);
-
-    const configJson = JSON.stringify(rotations);
-    if (existing && existing.length > 0) {
-      await supabase
-        .from("albums")
-        .update({ cover_url: configJson })
-        .eq("id", existing[0].id);
-    } else {
-      await supabase
-        .from("albums")
-        .insert({ name: "__system_config_rotations__", cover_url: configJson });
+    for (const [photoName, rotation] of Object.entries(rotations)) {
+      const photoId = getPhotoIdFromName(photoName);
+      if (isValidUUID(photoId)) {
+        await supabase
+          .from("photos")
+          .update({ rotation: rotation })
+          .eq("id", photoId);
+      }
     }
   } catch (err) {
     console.error("Error al guardar las rotaciones en Supabase:", err);
@@ -51,14 +142,21 @@ export async function loadRotationsFromSupabase(): Promise<Record<string, number
   const localActive = typeof window !== "undefined" && localStorage.getItem("family_album_local_mode_active") === "true";
   if (localActive) return null;
   try {
-    const { data } = await supabase
-      .from("albums")
-      .select("cover_url")
-      .eq("name", "__system_config_rotations__")
-      .limit(1);
+    const { data, error } = await supabase
+      .from("photos")
+      .select("id, rotation");
 
-    if (data && data.length > 0 && data[0].cover_url) {
-      return JSON.parse(data[0].cover_url);
+    if (error) throw error;
+
+    if (data) {
+      const rotations: Record<string, number> = {};
+      data.forEach((p) => {
+        if (p.rotation !== undefined && p.rotation !== null) {
+          rotations[`${p.id}.webp`] = p.rotation;
+          rotations[p.id] = p.rotation;
+        }
+      });
+      return rotations;
     }
   } catch (err) {
     console.error("Error al cargar las rotaciones de Supabase:", err);
@@ -217,6 +315,7 @@ export async function syncLocalDataToSupabase() {
 
   try {
     // 1. Sincronizar Rotaciones
+    await syncPendingRotations();
     const localRotsJson = localStorage.getItem("family_album_photo_rotations");
     if (localRotsJson) {
       const localRots = JSON.parse(localRotsJson);

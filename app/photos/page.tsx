@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase, isUserAdmin, saveRotationsToSupabase, loadRotationsFromSupabase, saveMetadataToSupabase, loadMetadataFromSupabase } from "@/lib/supabase";
+import { supabase, isUserAdmin, saveRotationsToSupabase, loadRotationsFromSupabase, saveMetadataToSupabase, loadMetadataFromSupabase, savePhotoRotation } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 import exifr from "exifr";
@@ -89,13 +89,11 @@ export default function PhotosPage() {
     if (e) e.stopPropagation();
     const currentRotation = rotations[photoName] || 0;
     const newRotation = (currentRotation + 90) % 360;
-    const updatedRotations = {
-      ...rotations,
+    setRotations(prev => ({
+      ...prev,
       [photoName]: newRotation,
-    };
-    setRotations(updatedRotations);
-    localStorage.setItem("family_album_photo_rotations", JSON.stringify(updatedRotations));
-    await saveRotationsToSupabase(updatedRotations);
+    }));
+    await savePhotoRotation(photoName, newRotation);
     window.dispatchEvent(new CustomEvent("photo-moved"));
   };
 
