@@ -41,12 +41,18 @@ export default function FaceCropper({
 
     const getOrientedImage = (imageSrc: string, angle: number): Promise<string> => {
       return new Promise((resolve) => {
-        if (angle === 0) {
+        if (angle === 0 && imageSrc.startsWith("data:")) {
           resolve(imageSrc);
           return;
         }
         const img = new Image();
         img.crossOrigin = "anonymous";
+        
+        // Evitar caché de CORS del navegador agregando cache-buster para URLs remotas
+        const srcWithBuster = imageSrc.startsWith("data:") 
+          ? imageSrc 
+          : `${imageSrc}${imageSrc.includes("?") ? "&" : "?"}t=${Date.now()}`;
+
         img.onload = () => {
           const canvas = document.createElement("canvas");
           const ctx = canvas.getContext("2d");
@@ -70,7 +76,7 @@ export default function FaceCropper({
         img.onerror = () => {
           resolve(imageSrc);
         };
-        img.src = imageSrc;
+        img.src = srcWithBuster;
       });
     };
 
@@ -239,6 +245,7 @@ export default function FaceCropper({
                 ref={imageRef}
                 src={orientedSrc}
                 alt="Para recortar"
+                crossOrigin="anonymous"
                 onLoad={handleImageLoad}
                 className="absolute origin-center max-w-none pointer-events-none"
                 style={{
