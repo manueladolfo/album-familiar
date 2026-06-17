@@ -153,6 +153,8 @@ const DEFAULT_PEOPLE: PersonProfile[] = [
   }
 ];
 
+const FAMILY_MEMBERS = ["Manu", "Papa", "Mama", "Pau"];
+
 export default function Home() {
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("search") || "";
@@ -189,18 +191,18 @@ export default function Home() {
   // Estados para añadir nueva persona/mascota
   const [isAddPersonOpen, setIsAddPersonOpen] = useState<boolean>(false);
   const [newPersonName, setNewPersonName] = useState<string>("");
-  const [selectedPhotoNamesForNewPerson, setSelectedPhotoNamesForNewPerson] = useState<string[]>([]);
   const [newPersonIsGroup, setNewPersonIsGroup] = useState<boolean>(false);
+  const [selectedPhotoNamesForNewPerson, setSelectedPhotoNamesForNewPerson] = useState<string[]>([]);
   const [newPersonCroppedAvatar, setNewPersonCroppedAvatar] = useState<string | null>(null);
   const [croppingPhoto, setCroppingPhoto] = useState<PhotoItem | LocalPhotoItem | null>(null);
 
-  // Limpiar el recorte guardado si cambia la foto seleccionada como avatar principal
   const firstSelectedPhotoName = selectedPhotoNamesForNewPerson[0];
-  const lastFirstPhotoRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (firstSelectedPhotoName !== lastFirstPhotoRef.current) {
-      setNewPersonCroppedAvatar(null);
-      lastFirstPhotoRef.current = firstSelectedPhotoName;
+    if (firstSelectedPhotoName) {
+      const selected = libraryPhotos.find((p) => p.name === firstSelectedPhotoName);
+      if (selected && !newPersonCroppedAvatar) {
+        // no-op, avatar defaults to uncropped
+      }
     }
   }, [firstSelectedPhotoName]);
 
@@ -208,6 +210,13 @@ export default function Home() {
   const [photoStories, setPhotoStories] = useState<Record<string, PhotoStory>>({});
   const [selectedDiaryPhoto, setSelectedDiaryPhoto] = useState<PhotoItem | null>(null);
   const [editingAnecdote, setEditingAnecdote] = useState<string>("");
+
+  // Estados para autocompletado de menciones (@)
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showMentionDropdown, setShowMentionDropdown] = useState<boolean>(false);
+  const [mentionTriggerIndex, setMentionTriggerIndex] = useState<number>(-1);
+  const [mentionSearchQuery, setMentionSearchQuery] = useState<string>("");
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState<number>(0);
 
   const currentCarouselPhotos = libraryPhotos.length > 0 ? libraryPhotos : SAMPLE_PHOTOS;
 
@@ -722,6 +731,71 @@ export default function Home() {
       ? `✍️ Se modificó la historia de "${photoTitle}".`
       : `✍️ Se narró la historia de "${photoTitle}".`;
     window.dispatchEvent(new CustomEvent("new-notification", { detail: { message: notifMsg, photoName: photoName } }));
+  };
+
+  // Autocompletado de menciones (@)
+  const filteredMembers = FAMILY_MEMBERS.filter(member => 
+    member.toLowerCase().startsWith(mentionSearchQuery.toLowerCase())
+  );
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setEditingAnecdote(val);
+
+    const selectionStart = e.target.selectionStart;
+    const textUpToCursor = val.slice(0, selectionStart);
+    const lastAt = textUpToCursor.lastIndexOf('@');
+
+    // Verificar si hay una @ activa antes del cursor en la palabra actual
+    if (lastAt !== -1) {
+      const query = textUpToCursor.slice(lastAt + 1);
+      // Solo activamos si no hay espacios o saltos de línea después de la @
+      if (!query.includes(' ') && !query.includes('\n')) {
+        setShowMentionDropdown(true);
+        setMentionTriggerIndex(lastAt);
+        setMentionSearchQuery(query);
+        setSelectedMentionIndex(0);
+        return;
+      }
+    }
+    setShowMentionDropdown(false);
+  };
+
+  const insertMention = (member: string) => {
+    if (!textareaRef.current) return;
+    const textarea = textareaRef.current;
+    const val = editingAnecdote;
+    const startPos = mentionTriggerIndex;
+    const endPos = textarea.selectionStart;
+
+    const mentionText = `@${member}: `;
+    const newVal = val.slice(0, startPos) + mentionText + val.slice(endPos);
+    setEditingAnecdote(newVal);
+    setShowMentionDropdown(false);
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = startPos + mentionText.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showMentionDropdown && filteredMembers.length > 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        e.preventDefault();
+        setSelectedMentionIndex((prev) => (prev + 1) % filteredMembers.length);
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        setSelectedMentionIndex((prev) => (prev - 1 + filteredMembers.length) % filteredMembers.length);
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(filteredMembers[selectedMentionIndex]);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setShowMentionDropdown(false);
+      }
+    }
   };
 
   // Sembrar todos los ejemplos locales
@@ -2022,13 +2096,41 @@ export default function Home() {
                   <label className="text-[10px] font-bold text-brand-navy/70 uppercase tracking-wider block">
                     ✍️ Tu Anécdota Personal
                   </label>
-                  <textarea
-                    value={editingAnecdote}
-                    onChange={(e) => setEditingAnecdote(e.target.value)}
-                    placeholder="¿Quién estaba allí? ¿Qué música sonaba? Escribe aquí tu recuerdo sobre este día para conservarlo..."
-                    className="w-full h-40 md:h-72 px-3 py-2 bg-transparent border border-brand-navy/20 focus:border-brand-navy text-base md:text-xs rounded-xs outline-none text-brand-navy font-medium placeholder:text-brand-navy/35 leading-relaxed resize-none scrollbar-thin"
-                    maxLength={1000}
-                  />
+                  <div className="relative bg-transparent">
+                    {showMentionDropdown && filteredMembers.length > 0 && (
+                      <div className="absolute bottom-full left-0 mb-2 bg-brand-cream border border-brand-navy/15 rounded-xs p-1.5 shadow-lg flex gap-1.5 z-20 animate-in fade-in slide-in-from-bottom-2 duration-150 flex-wrap">
+                        <span className="text-[9px] font-bold text-brand-navy/40 uppercase tracking-wider self-center px-1">
+                          Mencionar:
+                        </span>
+                        {filteredMembers.map((member, idx) => {
+                          const isSelected = idx === selectedMentionIndex;
+                          return (
+                            <button
+                              key={member}
+                              type="button"
+                              onClick={() => insertMention(member)}
+                              className={`px-2 py-0.5 text-[10px] font-bold rounded-xs border transition-all cursor-pointer ${
+                                isSelected
+                                  ? "bg-brand-navy text-brand-cream border-brand-navy shadow-sm"
+                                  : "bg-brand-cream text-brand-navy border-brand-navy/15 hover:bg-brand-navy/5"
+                              }`}
+                            >
+                              👤 {member}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <textarea
+                      ref={textareaRef}
+                      value={editingAnecdote}
+                      onChange={handleTextareaChange}
+                      onKeyDown={handleTextareaKeyDown}
+                      placeholder="¿Quién estaba allí? ¿Qué música sonaba? Escribe aquí tu recuerdo sobre este día para conservarlo..."
+                      className="w-full h-40 md:h-72 px-3 py-2 bg-transparent border border-brand-navy/20 focus:border-brand-navy text-base md:text-xs rounded-xs outline-none text-brand-navy font-medium placeholder:text-brand-navy/35 leading-relaxed resize-none scrollbar-thin"
+                      maxLength={1000}
+                    />
+                  </div>
                 </div>
               </div>
 
