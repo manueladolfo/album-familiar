@@ -274,6 +274,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         localStorage.setItem("family_album_uuid_migrated", "true");
       }
 
+      // Limpiar fotos de muestra heredadas del localStorage
+      const localPhotosRaw = localStorage.getItem("family_album_local_photos");
+      if (localPhotosRaw) {
+        try {
+          const parsed = JSON.parse(localPhotosRaw);
+          if (Array.isArray(parsed)) {
+            const cleaned = parsed.filter((p: any) => {
+              const nameLower = (p.name || "").toLowerCase();
+              const urlLower = (p.url || "").toLowerCase();
+              return !nameLower.includes("sample") && !urlLower.includes("unsplash.com");
+            });
+            if (cleaned.length !== parsed.length) {
+              localStorage.setItem("family_album_local_photos", JSON.stringify(cleaned));
+              
+              const statusesRaw = localStorage.getItem("family_album_photo_statuses");
+              const mappingsRaw = localStorage.getItem("family_album_photo_mappings");
+              if (statusesRaw) {
+                const statuses = JSON.parse(statusesRaw);
+                Object.keys(statuses).forEach(key => {
+                  if (key.toLowerCase().includes("sample")) {
+                    delete statuses[key];
+                  }
+                });
+                localStorage.setItem("family_album_photo_statuses", JSON.stringify(statuses));
+              }
+              if (mappingsRaw) {
+                const mappings = JSON.parse(mappingsRaw);
+                Object.keys(mappings).forEach(key => {
+                  if (key.toLowerCase().includes("sample")) {
+                    delete mappings[key];
+                  }
+                });
+                localStorage.setItem("family_album_photo_mappings", JSON.stringify(mappings));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error cleaning legacy sample photos:", e);
+        }
+      }
+
       const isCleared = localStorage.getItem("family_album_cleared") === "true";
       const localPhotos = localStorage.getItem("family_album_local_photos");
 
