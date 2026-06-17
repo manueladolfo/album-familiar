@@ -275,11 +275,42 @@ export default function Home() {
         }
       }
 
+      const cleanPeople = (peopleList: PersonProfile[]) => {
+        if (!Array.isArray(peopleList)) return peopleList;
+        return peopleList.map(p => {
+          if (p.avatar && p.avatar.includes("unsplash.com")) {
+            return { ...p, avatar: "" };
+          }
+          return p;
+        });
+      };
+
+      const cleanTagged = (taggedObj: Record<string, string[]>) => {
+        if (!taggedObj) return {};
+        const cleaned: Record<string, string[]> = {};
+        Object.keys(taggedObj).forEach(key => {
+          cleaned[key] = (taggedObj[key] || []).filter(name => !name.toLowerCase().includes("sample"));
+        });
+        return cleaned;
+      };
+
       if (loadedPeople && loadedTagged) {
-        setPeople(loadedPeople);
-        setTaggedPhotos(loadedTagged);
-        localStorage.setItem("family_album_people", JSON.stringify(loadedPeople));
-        localStorage.setItem("family_album_person_tags", JSON.stringify(loadedTagged));
+        const cleanedPeople = cleanPeople(loadedPeople);
+        const cleanedTagged = cleanTagged(loadedTagged);
+        
+        setPeople(cleanedPeople);
+        setTaggedPhotos(cleanedTagged);
+        localStorage.setItem("family_album_people", JSON.stringify(cleanedPeople));
+        localStorage.setItem("family_album_person_tags", JSON.stringify(cleanedTagged));
+
+        // Sincronizar los cambios limpios de vuelta a Supabase si hubo limpieza
+        const rawJsonString = JSON.stringify(loadedPeople);
+        const cleanedJsonString = JSON.stringify(cleanedPeople);
+        const rawTaggedString = JSON.stringify(loadedTagged);
+        const cleanedTaggedString = JSON.stringify(cleanedTagged);
+        if (rawJsonString !== cleanedJsonString || rawTaggedString !== cleanedTaggedString) {
+          savePeopleConfig(cleanedPeople, cleanedTagged);
+        }
       } else {
         const savedPeople = localStorage.getItem("family_album_people");
         let currentPeople = DEFAULT_PEOPLE;
@@ -288,25 +319,30 @@ export default function Home() {
         } else {
           localStorage.setItem("family_album_people", JSON.stringify(DEFAULT_PEOPLE));
         }
-        setPeople(currentPeople);
+
+        const cleanedPeople = cleanPeople(currentPeople);
+        setPeople(cleanedPeople);
+        localStorage.setItem("family_album_people", JSON.stringify(cleanedPeople));
 
         const savedTagged = localStorage.getItem("family_album_person_tags");
-        let currentTagged = {
-          "p_ma_cynthia": ["sample_boda_1980.webp", "sample_navidad_1992.webp"],
-          "p_ap_manuel": ["sample_playa_1985.webp", "sample_bicicleta_1987.webp"],
-          "p_ma_manuel": ["sample_picnic_1988.webp", "sample_navidad_1992.webp"],
-          "p_manuel_adolfo": ["sample_picnic_1988.webp", "sample_boda_1980.webp", "sample_navidad_1992.webp"],
-          "p_ana_paula": ["sample_playa_1985.webp", "sample_bicicleta_1987.webp", "sample_cumpleanos_1991.webp"],
-          "p_manuel": ["sample_picnic_1988.webp", "sample_playa_1985.webp", "sample_bicicleta_1987.webp"],
-          "p_cynthia": ["sample_boda_1980.webp", "sample_navidad_1992.webp"],
-          "p_dante": ["sample_playa_1985.webp"]
+        let currentTagged: Record<string, string[]> = {
+          "p_ma_cynthia": [],
+          "p_ap_manuel": [],
+          "p_ma_manuel": [],
+          "p_manuel_adolfo": [],
+          "p_ana_paula": [],
+          "p_manuel": [],
+          "p_cynthia": [],
+          "p_dante": []
         };
         if (savedTagged) {
           currentTagged = JSON.parse(savedTagged);
         } else {
           localStorage.setItem("family_album_person_tags", JSON.stringify(currentTagged));
         }
-        setTaggedPhotos(currentTagged);
+        const cleanedTagged = cleanTagged(currentTagged);
+        setTaggedPhotos(cleanedTagged);
+        localStorage.setItem("family_album_person_tags", JSON.stringify(cleanedTagged));
       }
     };
 
