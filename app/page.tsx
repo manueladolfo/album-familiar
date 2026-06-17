@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase, loadRotationsFromSupabase, saveStoriesToSupabase, loadStoriesFromSupabase, loadMetadataFromSupabase } from "@/lib/supabase";
+import { supabase, loadRotationsFromSupabase, saveRotationsToSupabase, saveStoriesToSupabase, loadStoriesFromSupabase, loadMetadataFromSupabase, saveMetadataToSupabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { filterPhotos, PhotoMetadata, PhotoItem } from "@/lib/search";
 import { isValidUUID } from "@/lib/uuid";
@@ -358,34 +358,61 @@ export default function Home() {
       }
 
       const remoteMeta = await loadMetadataFromSupabase();
+      const localMetaJson = localStorage.getItem("family_album_photo_metadata") || "{}";
+      const localMeta = JSON.parse(localMetaJson);
       if (remoteMeta) {
-        setPhotoMetadata(remoteMeta);
-        localStorage.setItem("family_album_photo_metadata", JSON.stringify(remoteMeta));
+        const mergedMeta = { ...remoteMeta };
+        Object.keys(localMeta).forEach((key) => {
+          if (!mergedMeta[key]) {
+            mergedMeta[key] = localMeta[key];
+          } else {
+            const mergedTags = Array.from(new Set([
+              ...(mergedMeta[key].tags || []),
+              ...(localMeta[key].tags || [])
+            ]));
+            mergedMeta[key] = {
+              tags: mergedTags,
+              location: localMeta[key].location || mergedMeta[key].location,
+              latitude: localMeta[key].latitude !== undefined && localMeta[key].latitude !== null ? localMeta[key].latitude : mergedMeta[key].latitude,
+              longitude: localMeta[key].longitude !== undefined && localMeta[key].longitude !== null ? localMeta[key].longitude : mergedMeta[key].longitude,
+            };
+          }
+        });
+        setPhotoMetadata(mergedMeta);
+        localStorage.setItem("family_album_photo_metadata", JSON.stringify(mergedMeta));
+        if (Object.keys(mergedMeta).length > Object.keys(remoteMeta).length) {
+          saveMetadataToSupabase(mergedMeta);
+        }
       } else {
-        const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
-        setPhotoMetadata(JSON.parse(metadataJson));
+        setPhotoMetadata(localMeta);
       }
 
       const remoteStories = await loadStoriesFromSupabase();
+      const localStoriesJson = localStorage.getItem("family_album_photo_stories") || "{}";
+      const localStories = JSON.parse(localStoriesJson);
       if (remoteStories) {
-        setPhotoStories(remoteStories);
-        localStorage.setItem("family_album_photo_stories", JSON.stringify(remoteStories));
+        const mergedStories = { ...remoteStories, ...localStories };
+        setPhotoStories(mergedStories);
+        localStorage.setItem("family_album_photo_stories", JSON.stringify(mergedStories));
+        if (Object.keys(mergedStories).length > Object.keys(remoteStories).length) {
+          saveStoriesToSupabase(mergedStories);
+        }
       } else {
-        const storiesJson = localStorage.getItem("family_album_photo_stories") || "{}";
-        setPhotoStories(JSON.parse(storiesJson));
+        setPhotoStories(localStories);
       }
 
       const remoteRots = await loadRotationsFromSupabase();
+      const localRotsJson = localStorage.getItem("family_album_photo_rotations") || "{}";
+      const localRots = JSON.parse(localRotsJson);
       if (remoteRots) {
-        setRotations(remoteRots);
-        localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
-      } else {
-        const savedRotations = localStorage.getItem("family_album_photo_rotations");
-        if (savedRotations) {
-          setRotations(JSON.parse(savedRotations));
-        } else {
-          setRotations({});
+        const mergedRots = { ...remoteRots, ...localRots };
+        setRotations(mergedRots);
+        localStorage.setItem("family_album_photo_rotations", JSON.stringify(mergedRots));
+        if (Object.keys(mergedRots).length > Object.keys(remoteRots).length) {
+          saveRotationsToSupabase(mergedRots);
         }
+      } else {
+        setRotations(localRots);
       }
     };
 

@@ -349,25 +349,53 @@ export async function pullRemoteDataToLocal() {
   if (localActive) return;
 
   try {
-    // 1. Descargar Historias
+    // 1. Descargar e integrar Historias (Fusión inteligente)
     const remoteStories = await loadStoriesFromSupabase();
     if (remoteStories) {
-      localStorage.setItem("family_album_photo_stories", JSON.stringify(remoteStories));
+      const localStoriesJson = localStorage.getItem("family_album_photo_stories") || "{}";
+      const localStories = JSON.parse(localStoriesJson);
+      const mergedStories = { ...remoteStories, ...localStories };
+      localStorage.setItem("family_album_photo_stories", JSON.stringify(mergedStories));
+      
+      // Si en local hay más historias que en Supabase (nuevas historias no subidas), sincronizar push
+      if (Object.keys(mergedStories).length > Object.keys(remoteStories).length) {
+        await saveStoriesToSupabase(mergedStories);
+      }
     }
 
-    // 2. Descargar Rotaciones
+    // 2. Descargar e integrar Rotaciones (Fusión inteligente)
     const remoteRots = await loadRotationsFromSupabase();
     if (remoteRots) {
-      localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
+      const localRotsJson = localStorage.getItem("family_album_photo_rotations") || "{}";
+      const localRots = JSON.parse(localRotsJson);
+      const mergedRots = { ...remoteRots, ...localRots };
+      localStorage.setItem("family_album_photo_rotations", JSON.stringify(mergedRots));
+
+      if (Object.keys(mergedRots).length > Object.keys(remoteRots).length) {
+        await saveRotationsToSupabase(mergedRots);
+      }
     }
 
-    // 3. Descargar Notificaciones
+    // 3. Descargar e integrar Notificaciones (Fusión inteligente)
     const remoteNotifs = await loadNotificationsFromSupabase();
     if (remoteNotifs) {
-      localStorage.setItem("family_album_notifications", JSON.stringify(remoteNotifs));
+      const localNotifsJson = localStorage.getItem("family_album_notifications") || "[]";
+      const localNotifs = JSON.parse(localNotifsJson);
+      const mergedNotifs = [...remoteNotifs];
+      localNotifs.forEach((ln: any) => {
+        if (!mergedNotifs.some((rn: any) => rn.id === ln.id)) {
+          mergedNotifs.push(ln);
+        }
+      });
+      mergedNotifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      localStorage.setItem("family_album_notifications", JSON.stringify(mergedNotifs));
+
+      if (mergedNotifs.length > remoteNotifs.length) {
+        await saveNotificationsToSupabase(mergedNotifs);
+      }
     }
 
-    // 4. Descargar Personas/Tags
+    // 4. Descargar e integrar Personas/Tags
     const { data: configData } = await supabase
       .from("albums")
       .select("cover_url")
@@ -376,18 +404,81 @@ export async function pullRemoteDataToLocal() {
 
     if (configData && configData.length > 0 && configData[0].cover_url) {
       const config = JSON.parse(configData[0].cover_url);
-      if (config.people) {
-        localStorage.setItem("family_album_people", JSON.stringify(config.people));
-      }
-      if (config.taggedPhotos) {
-        localStorage.setItem("family_album_person_tags", JSON.stringify(config.taggedPhotos));
+      const localPeopleJson = localStorage.getItem("family_album_people") || "[]";
+      const localPeople = JSON.parse(localPeopleJson);
+      const remotePeople = config.people || [];
+
+      // Fusión de personas
+      const mergedPeople = [...remotePeople];
+      localPeople.forEach((lp: any) => {
+        if (!mergedPeople.some((rp: any) => rp.id === lp.id)) {
+          mergedPeople.push(lp);
+        }
+      });
+
+      // Fusión de tags de fotos
+      const localTagsJson = localStorage.getItem("family_album_person_tags") || "{}";
+      const localTags = JSON.parse(localTagsJson);
+      const remoteTags = config.taggedPhotos || {};
+      const mergedTags: Record<string, string[]> = { ...remoteTags };
+      Object.keys(localTags).forEach((personId) => {
+        const localList = localTags[personId] || [];
+        const remoteList = mergedTags[personId] || [];
+        mergedTags[personId] = Array.from(new Set([...remoteList, ...localList]));
+      });
+
+      localStorage.setItem("family_album_people", JSON.stringify(mergedPeople));
+      localStorage.setItem("family_album_person_tags", JSON.stringify(mergedTags));
+
+      const hasMorePeople = mergedPeople.length > remotePeople.length;
+      const hasMoreTags = Object.keys(mergedTags).some(
+        (key) => (mergedTags[key]?.length || 0) > (remoteTags[key]?.length || 0)
+      );
+
+      if (hasMorePeople || hasMoreTags) {
+        const configJson = JSON.stringify({ people: mergedPeople, taggedPhotos: mergedTags });
+        const { data: existing } = await supabase
+          .from("albums")
+          .select("id")
+          .eq("name", "__system_config__")
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          await supabase
+            .from("albums")
+            .update({ cover_url: configJson })
+            .eq("id", existing[0].id);
+        }
       }
     }
 
-    // 5. Descargar Metadatos (GPS e IA)
+    // 5. Descargar e integrar Metadatos (GPS e IA - Fusión inteligente)
     const remoteMeta = await loadMetadataFromSupabase();
     if (remoteMeta) {
-      localStorage.setItem("family_album_photo_metadata", JSON.stringify(remoteMeta));
+      const localMetaJson = localStorage.getItem("family_album_photo_metadata") || "{}";
+      const localMeta = JSON.parse(localMetaJson);
+      const mergedMeta = { ...remoteMeta };
+      Object.keys(localMeta).forEach((key) => {
+        if (!mergedMeta[key]) {
+          mergedMeta[key] = localMeta[key];
+        } else {
+          const mergedTags = Array.from(new Set([
+            ...(mergedMeta[key].tags || []),
+            ...(localMeta[key].tags || [])
+          ]));
+          mergedMeta[key] = {
+            tags: mergedTags,
+            location: localMeta[key].location || mergedMeta[key].location,
+            latitude: localMeta[key].latitude !== undefined && localMeta[key].latitude !== null ? localMeta[key].latitude : mergedMeta[key].latitude,
+            longitude: localMeta[key].longitude !== undefined && localMeta[key].longitude !== null ? localMeta[key].longitude : mergedMeta[key].longitude,
+          };
+        }
+      });
+      localStorage.setItem("family_album_photo_metadata", JSON.stringify(mergedMeta));
+
+      if (Object.keys(mergedMeta).length > Object.keys(remoteMeta).length) {
+        await saveMetadataToSupabase(mergedMeta);
+      }
     }
 
     // Notificar eventos para redibujar la UI local

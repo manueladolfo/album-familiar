@@ -551,12 +551,26 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
 
   return (
     <>
+      {/* Filtro SVG para hacer transparente el fondo negro del logo invertido en modo oscuro */}
+      <svg width="0" height="0" className="absolute pointer-events-none" style={{ position: "absolute", width: 0, height: 0 }}>
+        <defs>
+          <filter id="remove-black-bg">
+            <feColorMatrix type="matrix" values="
+              1 0 0 0 0
+              0 1 0 0 0
+              0 0 1 0 0
+              1 1 1 0 0
+            "/>
+          </filter>
+        </defs>
+      </svg>
+
       <aside className={`w-[280px] fixed ${isLocalMode ? 'top-8' : 'top-0'} bottom-0 left-0 bg-brand-cream border-r border-brand-navy/10 flex flex-col z-50 transition-all duration-300 ease-in-out md:translate-x-0 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
         {/* Header con Logo */}
         <div 
-          className="py-10 px-4 border-b border-brand-navy/10 bg-transparent dark:bg-[#000000] flex items-center justify-between gap-2 relative overflow-visible"
+          className="py-10 px-4 border-b border-brand-navy/10 bg-transparent flex items-center justify-between gap-2 relative overflow-visible"
           onMouseEnter={triggerHearts}
           onTouchStart={(e) => {
             // No prevenir comportamiento por defecto pero sí lanzar corazones
@@ -570,7 +584,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
             <img
               src="/logo-familiar-transparente.png"
               alt="Álbum Familiar"
-              className="w-28 sm:w-32 h-auto object-contain bg-transparent mix-blend-multiply dark:mix-blend-screen dark:invert dark:sepia-[0.3] dark:brightness-[1.2] select-none"
+              className="w-28 sm:w-32 h-auto object-contain bg-transparent mix-blend-multiply dark:mix-blend-normal dark:[filter:url(#remove-black-bg)_invert(1)_sepia(0.3)_brightness(1.2)] select-none"
             />
 
             {/* Renderizado de corazones flotantes */}
