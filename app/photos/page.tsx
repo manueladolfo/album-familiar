@@ -1155,14 +1155,19 @@ export default function PhotosPage() {
                           <p className="text-brand-cream/70 text-[9px]">
                             {photo.created_at ? new Date(photo.created_at).toLocaleDateString("es-ES") : ""}
                           </p>
-                          {photoMetadata[photo.name] && (
+                          {(albumName || photoMetadata[photo.name]) && (
                             <div className="bg-transparent space-y-0.5 pt-0.5">
-                              {photoMetadata[photo.name].location && (
+                              {albumName && (
+                                <p className="text-[9px] text-brand-cream/85 font-semibold truncate flex items-center gap-1">
+                                  📁 {albumName}
+                                </p>
+                              )}
+                              {photoMetadata[photo.name]?.location && (
                                 <p className="text-[9px] text-brand-cream/80 truncate flex items-center gap-1">
                                   📍 {photoMetadata[photo.name].location}
                                 </p>
                               )}
-                              {photoMetadata[photo.name].tags && photoMetadata[photo.name].tags.length > 0 && (
+                              {photoMetadata[photo.name]?.tags && photoMetadata[photo.name].tags.length > 0 && (
                                 <p className="text-[8px] text-brand-cream/60 italic truncate">
                                   🏷️ {photoMetadata[photo.name].tags.slice(0, 4).join(", ")}
                                 </p>
@@ -1187,7 +1192,9 @@ export default function PhotosPage() {
 
                   {/* Badge de álbum */}
                   {albumName && (
-                    <div className="absolute top-3 left-3 bg-brand-timber text-brand-cream px-2 py-0.5 rounded-xs text-[9px] font-bold uppercase tracking-wider z-20">
+                    <div className={`absolute top-3 left-3 bg-brand-timber text-brand-cream px-2 py-0.5 rounded-xs text-[9px] font-bold uppercase tracking-wider z-20 transition-opacity duration-200 ${
+                      activeActionMenuPhoto === photo.name ? "opacity-0 pointer-events-none" : "group-hover:opacity-0"
+                    }`}>
                       {albumName}
                     </div>
                   )}
