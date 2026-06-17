@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, saveNotificationsToSupabase, loadNotificationsFromSupabase } from "@/lib/supabase";
 
 export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
   const pathname = usePathname();
@@ -139,15 +139,26 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const saved = localStorage.getItem("family_album_notifications");
-    let currentNotifs: NotificationItem[] = [];
-    if (saved) {
-      currentNotifs = JSON.parse(saved);
-      setNotifications(currentNotifs);
+    const initNotifs = async () => {
+      const remoteNotifs = await loadNotificationsFromSupabase();
+      let currentNotifs: NotificationItem[] = [];
+      if (remoteNotifs) {
+        currentNotifs = remoteNotifs;
+        setNotifications(remoteNotifs);
+        localStorage.setItem("family_album_notifications", JSON.stringify(remoteNotifs));
+      } else {
+        const saved = localStorage.getItem("family_album_notifications");
+        if (saved) {
+          currentNotifs = JSON.parse(saved);
+          setNotifications(currentNotifs);
+        }
+      }
       setHasUnread(currentNotifs.some((n: NotificationItem) => !n.read));
-    }
+    };
 
-    const handleNewNotification = (e: Event) => {
+    initNotifs();
+
+    const handleNewNotification = async (e: Event) => {
       const customEvent = e as CustomEvent<{ message: string; photoName?: string }>;
       const newNotif: NotificationItem = {
         id: `notif_${Date.now()}`,
@@ -161,30 +172,46 @@ export default function Navbar({ onOpenSidebar }: { onOpenSidebar?: () => void }
         const updated = [newNotif, ...prev];
         localStorage.setItem("family_album_notifications", JSON.stringify(updated));
         setHasUnread(true);
+        saveNotificationsToSupabase(updated);
         return updated;
       });
     };
 
+    const handleSyncNotifs = async () => {
+      const remoteNotifs = await loadNotificationsFromSupabase();
+      if (remoteNotifs) {
+        setNotifications(remoteNotifs);
+        setHasUnread(remoteNotifs.some((n: NotificationItem) => !n.read));
+      }
+    };
+
     window.addEventListener("new-notification", handleNewNotification);
+    window.addEventListener("photo-moved", handleSyncNotifs);
+    window.addEventListener("refresh-albums", handleSyncNotifs);
+
     return () => {
       window.removeEventListener("new-notification", handleNewNotification);
+      window.removeEventListener("photo-moved", handleSyncNotifs);
+      window.removeEventListener("refresh-albums", handleSyncNotifs);
     };
   }, []);
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
     setNotifications((prev) => {
       const updated = prev.map((n) => ({ ...n, read: true }));
       localStorage.setItem("family_album_notifications", JSON.stringify(updated));
       setHasUnread(false);
+      saveNotificationsToSupabase(updated);
       return updated;
     });
   };
 
-  const clearNotifications = () => {
+  const clearNotifications = async () => {
     setNotifications([]);
     localStorage.removeItem("family_album_notifications");
     setHasUnread(false);
     setShowNotifDropdown(false);
+    await saveNotificationsToSupabase([]);
   };
 
   // Cerrar el dropdown al hacer click fuera

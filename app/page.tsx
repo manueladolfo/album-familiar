@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase, loadRotationsFromSupabase } from "@/lib/supabase";
+import { supabase, loadRotationsFromSupabase, saveStoriesToSupabase, loadStoriesFromSupabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { filterPhotos, PhotoMetadata, PhotoItem } from "@/lib/search";
 import { isValidUUID } from "@/lib/uuid";
@@ -360,8 +360,14 @@ export default function Home() {
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
 
-      const storiesJson = localStorage.getItem("family_album_photo_stories") || "{}";
-      setPhotoStories(JSON.parse(storiesJson));
+      const remoteStories = await loadStoriesFromSupabase();
+      if (remoteStories) {
+        setPhotoStories(remoteStories);
+        localStorage.setItem("family_album_photo_stories", JSON.stringify(remoteStories));
+      } else {
+        const storiesJson = localStorage.getItem("family_album_photo_stories") || "{}";
+        setPhotoStories(JSON.parse(storiesJson));
+      }
 
       const remoteRots = await loadRotationsFromSupabase();
       if (remoteRots) {
@@ -604,7 +610,7 @@ export default function Home() {
   }, [libraryPhotos, photoStories]);
 
   // Guardar la anécdota personal y crónica del diario
-  const handleSaveStory = (photoName: string, chronicleText: string, anecdoteText: string) => {
+  const handleSaveStory = async (photoName: string, chronicleText: string, anecdoteText: string) => {
     const updatedStories = { ...photoStories };
     updatedStories[photoName] = {
       chronicle: chronicleText,
@@ -612,6 +618,7 @@ export default function Home() {
     };
     setPhotoStories(updatedStories);
     localStorage.setItem("family_album_photo_stories", JSON.stringify(updatedStories));
+    await saveStoriesToSupabase(updatedStories);
     setFeedback({ type: "success", text: "Anécdota del diario guardada correctamente." });
 
     // Emitir notificación a la campana del Navbar

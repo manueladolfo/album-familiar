@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
-import { supabase } from "@/lib/supabase";
+import { supabase, syncLocalDataToSupabase } from "@/lib/supabase";
 
 interface AlbumItem {
   id: string;
@@ -115,6 +115,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           router.push("/");
         } else {
           setAuthorized(true);
+          syncLocalDataToSupabase();
         }
       } catch (err) {
         console.error("Error al obtener la sesión de Supabase:", err);
