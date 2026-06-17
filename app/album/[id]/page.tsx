@@ -1113,14 +1113,14 @@ export default function AlbumPage({ params }: PageProps) {
                         </p>
                         {photoMetadata[photo.name] && (
                           <div className="bg-transparent space-y-0.5 pt-1">
-                            {photoMetadata[photo.name].location && (
+                            {photoMetadata[photo.name]?.location && (
                               <p className="text-[9px] text-brand-cream/80 truncate flex items-center gap-1">
                                 📍 {photoMetadata[photo.name].location}
                               </p>
                             )}
-                            {photoMetadata[photo.name].tags && (
+                            {photoMetadata[photo.name]?.tags && (
                               (() => {
-                                const filtered = photoMetadata[photo.name].tags.filter(
+                                const filtered = (photoMetadata[photo.name]?.tags || []).filter(
                                   (t: string) => !["recuerdo", "familiar", "recuerdo familiar", "foto", "imagen", "momento", "fotografía", "recuerdo familiar", "foto familiar"].includes(t.toLowerCase().trim())
                                 );
                                 if (filtered.length === 0) return null;

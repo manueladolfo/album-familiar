@@ -202,7 +202,7 @@ PROHIBIDO usar etiquetas genéricas como 'recuerdo', 'familiar', 'foto', 'imagen
         } else if (errorData) {
           errorMsg = JSON.stringify(errorData);
         }
-      } catch (_) {
+      } catch {
         // Ignorar fallo al parsear el JSON de error
       }
       throw new Error(`API de Gemini error: ${errorMsg}`);
