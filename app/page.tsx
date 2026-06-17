@@ -5,6 +5,7 @@ import { supabase, loadRotationsFromSupabase, saveRotationsToSupabase, saveStori
 import { useSearchParams } from "next/navigation";
 import { filterPhotos, PhotoMetadata, PhotoItem } from "@/lib/search";
 import { isValidUUID } from "@/lib/uuid";
+import FaceCropper from "@/components/FaceCropper";
 
 interface SamplePhoto {
   id: string;
@@ -180,6 +181,18 @@ export default function Home() {
   const [newPersonName, setNewPersonName] = useState<string>("");
   const [selectedPhotoNamesForNewPerson, setSelectedPhotoNamesForNewPerson] = useState<string[]>([]);
   const [newPersonIsGroup, setNewPersonIsGroup] = useState<boolean>(false);
+  const [newPersonCroppedAvatar, setNewPersonCroppedAvatar] = useState<string | null>(null);
+  const [croppingPhoto, setCroppingPhoto] = useState<PhotoItem | LocalPhotoItem | null>(null);
+
+  // Limpiar el recorte guardado si cambia la foto seleccionada como avatar principal
+  const firstSelectedPhotoName = selectedPhotoNamesForNewPerson[0];
+  const lastFirstPhotoRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (firstSelectedPhotoName !== lastFirstPhotoRef.current) {
+      setNewPersonCroppedAvatar(null);
+      lastFirstPhotoRef.current = firstSelectedPhotoName;
+    }
+  }, [firstSelectedPhotoName]);
 
   // Estados para Diario de Historias Familiares
   const [photoStories, setPhotoStories] = useState<Record<string, PhotoStory>>({});
@@ -1463,18 +1476,23 @@ export default function Home() {
                             {/* Overlay en hover */}
                             <div className="absolute inset-0 bg-brand-navy/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
                               <div className="flex gap-2 justify-between items-start bg-transparent w-full">
-                                <button
-                                  onClick={() => setPersonAvatar(selectedPerson.id, photo.url)}
-                                  disabled={isCurrentAvatar}
-                                  className={`p-1 text-[9px] font-semibold rounded-xs shadow-md cursor-pointer transition-all ${
-                                    isCurrentAvatar
-                                      ? "bg-brand-navy text-brand-cream/60 cursor-not-allowed opacity-50"
-                                      : "bg-brand-cream text-brand-navy hover:bg-brand-navy hover:text-brand-cream"
-                                  }`}
-                                  title="Establecer como foto de portada"
-                                >
-                                  Portada
-                                </button>
+                                {isCurrentAvatar ? (
+                                  <button
+                                    onClick={() => setCroppingPhoto(photo)}
+                                    className="p-1 text-[9px] font-semibold rounded-xs shadow-md cursor-pointer transition-all bg-brand-cream text-brand-navy hover:bg-brand-navy hover:text-brand-cream"
+                                    title="Recortar cara para la foto de perfil"
+                                  >
+                                    Recortar
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => setPersonAvatar(selectedPerson.id, photo.url)}
+                                    className="p-1 text-[9px] font-semibold rounded-xs shadow-md cursor-pointer transition-all bg-brand-cream text-brand-navy hover:bg-brand-navy hover:text-brand-cream"
+                                    title="Establecer como foto de portada"
+                                  >
+                                    Portada
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => removePhotoFromPerson(photo.name)}
                                   className="p-1 bg-red-600 hover:bg-red-700 text-brand-cream text-[9px] rounded-xs shadow-md cursor-pointer transition-colors"
@@ -1606,6 +1624,7 @@ export default function Home() {
                   setIsAddPersonOpen(false);
                   setNewPersonName("");
                   setSelectedPhotoNamesForNewPerson([]);
+                  setNewPersonCroppedAvatar(null);
                 }}
                 className="p-1 hover:bg-brand-navy/5 text-brand-navy/70 hover:text-brand-navy rounded-xs cursor-pointer text-xs"
               >
@@ -1629,6 +1648,44 @@ export default function Home() {
                   maxLength={40}
                 />
               </div>
+
+              {/* Vista previa y recortador del avatar/portada */}
+              {selectedPhotoNamesForNewPerson.length > 0 && (
+                <div className="flex items-center gap-4 p-3 border border-brand-navy/15 rounded-xs bg-brand-cream/50">
+                  <div className="w-14 h-14 rounded-full overflow-hidden border border-brand-navy/20 relative group flex-shrink-0">
+                    <img
+                      src={newPersonCroppedAvatar || libraryPhotos.find(p => p.name === selectedPhotoNamesForNewPerson[0])?.url}
+                      alt="Avatar Vista Previa"
+                      className="w-full h-full object-cover"
+                      style={{
+                        transform: !newPersonCroppedAvatar ? `rotate(${rotations[selectedPhotoNamesForNewPerson[0]] || 0}deg)` : 'none'
+                      }}
+                    />
+                  </div>
+                  <div className="flex-1 bg-transparent">
+                    <h4 className="text-xs font-bold text-brand-navy/80 uppercase tracking-wider">
+                      Foto de perfil (Avatar)
+                    </h4>
+                    <p className="text-[10px] text-brand-navy/50 mb-1.5">
+                      {newPersonCroppedAvatar 
+                        ? "Rostro personalizado recortado." 
+                        : "Se usará la foto completa. Puedes recortar la cara para mejorar el avatar."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const firstPhoto = libraryPhotos.find(p => p.name === selectedPhotoNamesForNewPerson[0]);
+                        if (firstPhoto) {
+                          setCroppingPhoto(firstPhoto);
+                        }
+                      }}
+                      className="py-1 px-2.5 bg-brand-navy text-brand-cream text-[10px] font-semibold rounded-xs hover:bg-brand-navy/90 cursor-pointer flex items-center gap-1.5 shadow-xs transition-colors"
+                    >
+                      ✂️ Recortar Rostro
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Grid de Fotos de la Biblioteca */}
               <div className="space-y-3 bg-transparent">
@@ -1716,6 +1773,7 @@ export default function Home() {
                   setIsAddPersonOpen(false);
                   setNewPersonName("");
                   setSelectedPhotoNamesForNewPerson([]);
+                  setNewPersonCroppedAvatar(null);
                 }}
                 className="py-1.5 px-4 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy text-xs font-medium rounded-xs transition-all cursor-pointer"
               >
@@ -1731,13 +1789,16 @@ export default function Home() {
                   const newId = `p_${Date.now()}`;
                   
                   // Obtener la URL de la primera foto seleccionada (si hay)
-                  let avatarUrl = newPersonIsGroup 
-                    ? "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop" // Imagen de grupo por defecto
-                    : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop"; // Avatar por defecto
-                  if (selectedPhotoNamesForNewPerson.length > 0) {
-                    const firstPhoto = libraryPhotos.find((p) => p.name === selectedPhotoNamesForNewPerson[0]);
-                    if (firstPhoto && firstPhoto.url) {
-                      avatarUrl = firstPhoto.url;
+                  let avatarUrl = newPersonCroppedAvatar;
+                  if (!avatarUrl) {
+                    avatarUrl = newPersonIsGroup 
+                      ? "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800&auto=format&fit=crop" // Imagen de grupo por defecto
+                      : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop"; // Avatar por defecto
+                    if (selectedPhotoNamesForNewPerson.length > 0) {
+                      const firstPhoto = libraryPhotos.find((p) => p.name === selectedPhotoNamesForNewPerson[0]);
+                      if (firstPhoto && firstPhoto.url) {
+                        avatarUrl = firstPhoto.url;
+                      }
                     }
                   }
                   const newPerson: PersonProfile = {
@@ -1762,6 +1823,7 @@ export default function Home() {
                   setIsAddPersonOpen(false);
                   setNewPersonName("");
                   setSelectedPhotoNamesForNewPerson([]);
+                  setNewPersonCroppedAvatar(null);
 
                   setFeedback({
                     type: "success",
@@ -1985,6 +2047,24 @@ export default function Home() {
 
           </div>
         </div>
+      )}
+
+      {/* MODAL DE RECORTE DE ROSTRO (FACE CROPPER) */}
+      {croppingPhoto && (
+        <FaceCropper
+          src={croppingPhoto.url}
+          rotation={rotations[croppingPhoto.name] || 0}
+          title={selectedPerson ? `Ajustar rostro de ${selectedPerson.name}` : "Ajustar foto de perfil"}
+          onClose={() => setCroppingPhoto(null)}
+          onCrop={(croppedBase64) => {
+            if (selectedPerson) {
+              setPersonAvatar(selectedPerson.id, croppedBase64);
+            } else {
+              setNewPersonCroppedAvatar(croppedBase64);
+            }
+            setCroppingPhoto(null);
+          }}
+        />
       )}
 
     </div>
