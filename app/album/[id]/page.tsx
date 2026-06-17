@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, saveRotationsToSupabase, loadRotationsFromSupabase } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 import exifr from "exifr";
@@ -443,9 +443,15 @@ export default function AlbumPage({ params }: PageProps) {
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
 
-      const savedRotations = localStorage.getItem("family_album_photo_rotations");
-      if (savedRotations) {
-        setRotations(JSON.parse(savedRotations));
+      const remoteRots = await loadRotationsFromSupabase();
+      if (remoteRots) {
+        setRotations(remoteRots);
+        localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
+      } else {
+        const savedRotations = localStorage.getItem("family_album_photo_rotations");
+        if (savedRotations) {
+          setRotations(JSON.parse(savedRotations));
+        }
       }
 
       setPhotos(albumPhotos);
@@ -456,7 +462,7 @@ export default function AlbumPage({ params }: PageProps) {
     }
   };
 
-  const handleRotatePhoto = (photoName: string, e?: React.MouseEvent) => {
+  const handleRotatePhoto = async (photoName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const currentRotation = rotations[photoName] || 0;
     const newRotation = (currentRotation + 90) % 360;
@@ -466,6 +472,7 @@ export default function AlbumPage({ params }: PageProps) {
     };
     setRotations(updatedRotations);
     localStorage.setItem("family_album_photo_rotations", JSON.stringify(updatedRotations));
+    await saveRotationsToSupabase(updatedRotations);
     window.dispatchEvent(new CustomEvent("photo-moved"));
   };
 
@@ -473,11 +480,17 @@ export default function AlbumPage({ params }: PageProps) {
     fetchAlbumData();
 
     // Escuchar cambios reactivos en caso de que se quiten fotos del álbum o se muevan
-    const handlePhotoMoved = () => {
+    const handlePhotoMoved = async () => {
       fetchAlbumData();
-      const savedRotations = localStorage.getItem("family_album_photo_rotations");
-      if (savedRotations) {
-        setRotations(JSON.parse(savedRotations));
+      const remoteRots = await loadRotationsFromSupabase();
+      if (remoteRots) {
+        setRotations(remoteRots);
+        localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
+      } else {
+        const savedRotations = localStorage.getItem("family_album_photo_rotations");
+        if (savedRotations) {
+          setRotations(JSON.parse(savedRotations));
+        }
       }
     };
     window.addEventListener("photo-moved", handlePhotoMoved);

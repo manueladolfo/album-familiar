@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, loadRotationsFromSupabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { filterPhotos, PhotoMetadata, PhotoItem } from "@/lib/search";
 import { isValidUUID } from "@/lib/uuid";
@@ -363,11 +363,17 @@ export default function Home() {
       const storiesJson = localStorage.getItem("family_album_photo_stories") || "{}";
       setPhotoStories(JSON.parse(storiesJson));
 
-      const savedRotations = localStorage.getItem("family_album_photo_rotations");
-      if (savedRotations) {
-        setRotations(JSON.parse(savedRotations));
+      const remoteRots = await loadRotationsFromSupabase();
+      if (remoteRots) {
+        setRotations(remoteRots);
+        localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
       } else {
-        setRotations({});
+        const savedRotations = localStorage.getItem("family_album_photo_rotations");
+        if (savedRotations) {
+          setRotations(JSON.parse(savedRotations));
+        } else {
+          setRotations({});
+        }
       }
     };
 

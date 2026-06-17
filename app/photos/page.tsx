@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase, isUserAdmin } from "@/lib/supabase";
+import { supabase, isUserAdmin, saveRotationsToSupabase, loadRotationsFromSupabase } from "@/lib/supabase";
 import { generateUUID, isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 import exifr from "exifr";
@@ -57,14 +57,23 @@ export default function PhotosPage() {
   }
 
   useEffect(() => {
-    const savedFavorites = localStorage.getItem("family_album_favorites");
-    if (savedFavorites) {
-      setFavorites(JSON.parse(savedFavorites));
-    }
-    const savedRotations = localStorage.getItem("family_album_photo_rotations");
-    if (savedRotations) {
-      setRotations(JSON.parse(savedRotations));
-    }
+    const initData = async () => {
+      const savedFavorites = localStorage.getItem("family_album_favorites");
+      if (savedFavorites) {
+        setFavorites(JSON.parse(savedFavorites));
+      }
+      const remoteRots = await loadRotationsFromSupabase();
+      if (remoteRots) {
+        setRotations(remoteRots);
+        localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
+      } else {
+        const savedRotations = localStorage.getItem("family_album_photo_rotations");
+        if (savedRotations) {
+          setRotations(JSON.parse(savedRotations));
+        }
+      }
+    };
+    initData();
   }, []);
 
   const toggleFavorite = (photoName: string) => {
@@ -76,7 +85,7 @@ export default function PhotosPage() {
     window.dispatchEvent(new CustomEvent("photo-moved"));
   };
 
-  const handleRotatePhoto = (photoName: string, e?: React.MouseEvent) => {
+  const handleRotatePhoto = async (photoName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const currentRotation = rotations[photoName] || 0;
     const newRotation = (currentRotation + 90) % 360;
@@ -86,6 +95,7 @@ export default function PhotosPage() {
     };
     setRotations(updatedRotations);
     localStorage.setItem("family_album_photo_rotations", JSON.stringify(updatedRotations));
+    await saveRotationsToSupabase(updatedRotations);
     window.dispatchEvent(new CustomEvent("photo-moved"));
   };
 
@@ -482,11 +492,17 @@ export default function PhotosPage() {
     fetchPhotos();
  
     // Escuchar cambios globales de Drag & Drop o de actualización de fotos y álbumes
-    const handlePhotoMoved = () => {
+    const handlePhotoMoved = async () => {
       fetchPhotos();
-      const savedRotations = localStorage.getItem("family_album_photo_rotations");
-      if (savedRotations) {
-        setRotations(JSON.parse(savedRotations));
+      const remoteRots = await loadRotationsFromSupabase();
+      if (remoteRots) {
+        setRotations(remoteRots);
+        localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
+      } else {
+        const savedRotations = localStorage.getItem("family_album_photo_rotations");
+        if (savedRotations) {
+          setRotations(JSON.parse(savedRotations));
+        }
       }
     };
     const handleRefreshAlbums = () => fetchAlbums();

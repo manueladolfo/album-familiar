@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, saveRotationsToSupabase, loadRotationsFromSupabase } from "@/lib/supabase";
 import { isValidUUID } from "@/lib/uuid";
 import { useSearchParams } from "next/navigation";
 import { filterPhotos, PersonProfile, PhotoMetadata, PhotoItem } from "@/lib/search";
@@ -210,9 +210,15 @@ export default function TrashPage() {
       const metadataJson = localStorage.getItem("family_album_photo_metadata") || "{}";
       setPhotoMetadata(JSON.parse(metadataJson));
 
-      const savedRotations = localStorage.getItem("family_album_photo_rotations");
-      if (savedRotations) {
-        setRotations(JSON.parse(savedRotations));
+      const remoteRots = await loadRotationsFromSupabase();
+      if (remoteRots) {
+        setRotations(remoteRots);
+        localStorage.setItem("family_album_photo_rotations", JSON.stringify(remoteRots));
+      } else {
+        const savedRotations = localStorage.getItem("family_album_photo_rotations");
+        if (savedRotations) {
+          setRotations(JSON.parse(savedRotations));
+        }
       }
 
       setPhotos(trashPhotos);
@@ -996,7 +1002,7 @@ export default function TrashPage() {
 
             {/* Botón de girar */}
             <button
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
                 const currentRotation = rotations[activeLightboxPhoto.name] || 0;
                 const newRotation = (currentRotation + 90) % 360;
@@ -1006,6 +1012,7 @@ export default function TrashPage() {
                 };
                 setRotations(updatedRotations);
                 localStorage.setItem("family_album_photo_rotations", JSON.stringify(updatedRotations));
+                await saveRotationsToSupabase(updatedRotations);
               }}
               className="p-2.5 text-white hover:text-brand-sage transition-colors cursor-pointer flex items-center justify-center rounded-full hover:bg-white/10"
               title="Girar foto 90°"
