@@ -161,6 +161,16 @@ export default function Home() {
   const [libraryPhotos, setLibraryPhotos] = useState<PhotoItem[]>([]);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Auto-cerrar el cartel de operación exitosa en 5 segundos
+  useEffect(() => {
+    if (feedback && feedback.type === "success") {
+      const timer = setTimeout(() => {
+        setFeedback(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedback]);
+
   // Estados de Colecciones & Música
   const [activeCollectionIndex, setActiveCollectionIndex] = useState<number>(0);
   const [isFullscreenCarousel, setIsFullscreenCarousel] = useState<boolean>(false);
