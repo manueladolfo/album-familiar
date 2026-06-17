@@ -190,6 +190,37 @@ export default function Home() {
 
   // Inicialización de música, personas e importados
   useEffect(() => {
+    // Purga de claves obsoletas de localStorage no utilizadas por la aplicación
+    const activeKeys = [
+      "family_album_pending_rotations",
+      "family_album_local_mode_active",
+      "family_album_photo_rotations",
+      "family_album_photo_stories",
+      "family_album_people",
+      "family_album_person_tags",
+      "family_album_notifications",
+      "family_album_photo_metadata",
+      "family_album_user_email",
+      "family_album_gemini_api_key",
+      "family_album_local_albums",
+      "family_album_favorites",
+      "family_album_local_photos",
+      "family_album_photo_statuses",
+      "family_album_photo_mappings"
+    ];
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("family_album_") && !activeKeys.includes(key)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn("No se pudo limpiar el localStorage:", e);
+    }
+
     // 1. Inicializar Supabase status
     const localActive = localStorage.getItem("family_album_local_mode_active") === "true";
     if (localActive) {
