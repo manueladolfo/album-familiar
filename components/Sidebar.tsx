@@ -560,7 +560,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
             <img
               src="/logo-familiar-transparente.png"
               alt="Álbum Familiar"
-              className="w-28 sm:w-32 h-auto object-contain bg-transparent mix-blend-multiply select-none"
+              className="w-28 sm:w-32 h-auto object-contain bg-transparent mix-blend-multiply dark:mix-blend-normal dark:invert dark:sepia-[0.3] dark:brightness-[1.2] select-none"
             />
 
             {/* Renderizado de corazones flotantes */}
