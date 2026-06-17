@@ -1011,17 +1011,27 @@ export default function Home() {
                   isActive ? "opacity-100 z-10 scale-100" : "opacity-0 z-0 scale-[1.01]"
                 }`}
               >
-                <img
-                  src={photo.url}
-                  alt={aiTags.join(", ") || "Recuerdo familiar"}
-                  className="w-full h-full object-cover transition-transform duration-300"
-                  style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
-                />
+                <div className="absolute inset-0 bg-brand-navy/95 flex items-center justify-center overflow-hidden">
+                  {/* Fondo difuminado ambiental */}
+                  <img
+                    src={photo.url}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-35 select-none pointer-events-none"
+                    style={{ transform: `rotate(${rotations[photo.name] || 0}deg) scale(1.15)` }}
+                  />
+                  {/* Imagen original contenida en el frente */}
+                  <img
+                    src={photo.url}
+                    alt={aiTags.join(", ") || "Recuerdo familiar"}
+                    className="relative w-full h-full object-contain z-10 transition-transform duration-300"
+                    style={{ transform: `rotate(${rotations[photo.name] || 0}deg)` }}
+                  />
+                </div>
                 
                 {/* Degradado premium inferior */}
-                <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/90 via-transparent to-transparent flex flex-col justify-end p-6 md:p-8" />
+                <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/95 via-transparent to-transparent flex flex-col justify-end p-6 md:p-8 z-20 pointer-events-none" />
                 
-                <div className="absolute bottom-6 left-6 md:bottom-8 md:left-8 z-20 text-brand-cream space-y-1.5 bg-transparent">
+                <div className="absolute bottom-6 left-6 md:bottom-8 md:left-8 z-30 text-brand-cream space-y-1.5 bg-transparent">
                   {photoYear && (
                     <span className="bg-brand-timber text-brand-cream text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-xs">
                       {photoYear}
