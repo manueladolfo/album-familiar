@@ -551,50 +551,34 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
 
   return (
     <>
-      {/* Filtros SVG para colorear la silueta y hacer transparente el fondo blanco del logo */}
-      <svg width="0" height="0" className="absolute pointer-events-none" style={{ position: "absolute", width: 0, height: 0 }}>
-        <defs>
-          {/* Filtro para modo claro: silueta azul oscuro (#0d1b2a) y fondo transparente */}
-          <filter id="logo-modo-claro">
-            <feColorMatrix type="matrix" values="
-              0 0 0 0 0.05
-              0 0 0 0 0.11
-              0 0 0 0 0.16
-              -3 -3 -3 0 9
-            "/>
-          </filter>
-          {/* Filtro para modo oscuro: silueta crema claro (#FFFDF5) y fondo transparente */}
-          <filter id="logo-modo-oscuro">
-            <feColorMatrix type="matrix" values="
-              0 0 0 0 1.0
-              0 0 0 0 0.99
-              0 0 0 0 0.96
-              -3 -3 -3 0 9
-            "/>
-          </filter>
-        </defs>
-      </svg>
-
       <aside className={`w-[280px] fixed ${isLocalMode ? 'top-8' : 'top-0'} bottom-0 left-0 bg-brand-cream border-r border-brand-navy/10 flex flex-col z-50 transition-all duration-300 ease-in-out md:translate-x-0 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
         {/* Header con Logo */}
         <div 
-          className="py-10 px-4 border-b border-brand-navy/10 bg-transparent flex items-center justify-between gap-2 relative overflow-visible"
+          className="py-10 px-4 border-b border-brand-navy/10 bg-transparent flex items-center justify-center gap-2 relative overflow-visible"
           onMouseEnter={triggerHearts}
           onTouchStart={(e) => {
-            // No prevenir comportamiento por defecto pero sí lanzar corazones
             triggerHearts();
           }}
         >
           <Link
             href="/"
-            className="flex-1 flex items-center justify-center bg-transparent relative"
+            className="flex items-center justify-center bg-transparent relative w-full"
           >
-            <img
-              src="/logo-familiar-transparente-v3.png?v=4"
-              alt="Álbum Familiar"
-              className="w-30 sm:w-34 h-auto object-contain bg-transparent [filter:url(#logo-modo-claro)] dark:[filter:url(#logo-modo-oscuro)] select-none"
+            <div
+              className="w-48 sm:w-56 h-28 sm:h-32 bg-brand-navy select-none transition-all duration-350"
+              style={{
+                maskImage: "url(/logo-familiar-mask.png?v=5)",
+                maskSize: "contain",
+                maskRepeat: "no-repeat",
+                maskPosition: "center",
+                WebkitMaskImage: "url(/logo-familiar-mask.png?v=5)",
+                WebkitMaskSize: "contain",
+                WebkitMaskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+              }}
+              aria-label="Álbum Familiar"
             />
 
             {/* Renderizado de corazones flotantes */}

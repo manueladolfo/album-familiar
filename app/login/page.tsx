@@ -113,10 +113,19 @@ export default function LoginPage() {
         
         {/* Logotipo responsive y centrado con blend multiply */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/logo-familiar-transparente-v3.png?v=4"
-          alt="Álbum Familiar Logo"
-          className="w-[220px] sm:w-[260px] md:w-[300px] h-auto object-contain bg-transparent transition-all duration-350"
+        <div
+          className="w-[220px] sm:w-[260px] md:w-[300px] h-[124px] sm:h-[147px] md:h-[170px] bg-brand-navy select-none transition-all duration-350"
+          style={{
+            maskImage: "url(/logo-familiar-mask.png?v=5)",
+            maskSize: "contain",
+            maskRepeat: "no-repeat",
+            maskPosition: "center",
+            WebkitMaskImage: "url(/logo-familiar-mask.png?v=5)",
+            WebkitMaskSize: "contain",
+            WebkitMaskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+          }}
+          aria-label="Álbum Familiar Logo"
         />
 
         {/* Cajetín de Autenticación */}
