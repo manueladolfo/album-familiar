@@ -17,9 +17,9 @@ export const metadata: Metadata = {
     title: "Álbum Familiar",
   },
   icons: {
-    icon: "/logo-familiar-transparente.png",
-    shortcut: "/logo-familiar-transparente.png",
-    apple: "/logo-familiar.png",
+    icon: "/logo-familiar-transparente-v3.png",
+    shortcut: "/logo-familiar-transparente-v3.png",
+    apple: "/logo-familiar-v3.png",
   },
 };
 

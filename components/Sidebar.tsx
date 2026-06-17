@@ -592,7 +592,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
             className="flex-1 flex items-center justify-center bg-transparent relative"
           >
             <img
-              src="/logo-familiar-transparente.png"
+              src="/logo-familiar-transparente-v3.png?v=3"
               alt="Álbum Familiar"
               className="w-30 sm:w-34 h-auto object-contain bg-transparent [filter:url(#logo-modo-claro)] dark:[filter:url(#logo-modo-oscuro)] select-none"
             />

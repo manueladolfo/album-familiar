@@ -114,9 +114,9 @@ export default function LoginPage() {
         {/* Logotipo responsive y centrado con blend multiply */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/logo-familiar-transparente.png"
+          src="/logo-familiar-transparente-v3.png?v=3"
           alt="Álbum Familiar Logo"
-          className="w-[220px] sm:w-[260px] md:w-[300px] h-auto object-contain bg-transparent mix-blend-multiply transition-all duration-350"
+          className="w-[220px] sm:w-[260px] md:w-[300px] h-auto object-contain bg-transparent transition-all duration-350"
         />
 
         {/* Cajetín de Autenticación */}
