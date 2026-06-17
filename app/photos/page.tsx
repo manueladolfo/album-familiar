@@ -226,6 +226,7 @@ export default function PhotosPage() {
   // Estado de selección por lotes
   const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+  const [showBulkAlbumDropdown, setShowBulkAlbumDropdown] = useState<boolean>(false);
 
   const toggleSelectPhoto = (photoName: string) => {
     setSelectedPhotos((prev) => {
@@ -247,6 +248,92 @@ export default function PhotosPage() {
     setIsSelectMode(false);
   };
 
+  const moveSelectedToAlbum = async (albumId: string | null) => {
+    const isLocalMode = localStorage.getItem("family_album_local_mode_active") === "true";
+    
+    if (!isLocalMode) {
+      // MODO ONLINE: Supabase (Llamada única y súper rápida)
+      try {
+        const photoIds = Array.from(selectedPhotos).map(photoName => {
+          const nameWithoutExt = photoName.replace(/\.[^/.]+$/, "");
+          const cleanPhotoId = nameWithoutExt.split(".")[0];
+          return isValidUUID(cleanPhotoId) ? cleanPhotoId : null;
+        }).filter(id => id !== null) as string[];
+
+        if (photoIds.length === 0) {
+          setUploadStatus({ type: "error", message: "No se identificaron fotos con IDs válidos." });
+          setTimeout(() => setUploadStatus(null), 4000);
+          return;
+        }
+
+        if (albumId !== null && !isValidUUID(albumId)) {
+          setUploadStatus({ type: "error", message: "Álbum no válido" });
+          setTimeout(() => setUploadStatus(null), 4000);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("photos")
+          .update({ album_id: albumId })
+          .in("id", photoIds)
+          .select();
+
+        if (error) throw error;
+
+        // Mapeos locales rápidos para actualización inmediata
+        const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+        const mappings = JSON.parse(mappingsJson);
+        selectedPhotos.forEach(photoName => {
+          mappings[photoName] = albumId;
+        });
+        localStorage.setItem("family_album_photo_mappings", JSON.stringify(mappings));
+
+        const albumLabel = albumId ? albums.find(a => a.id === albumId)?.name || "álbum" : "";
+        setUploadStatus({ 
+          type: "success", 
+          message: albumId 
+            ? `Se han añadido ${photoIds.length} fotos a "${albumLabel}"` 
+            : `Se han quitado ${photoIds.length} fotos del álbum` 
+        });
+        setTimeout(() => setUploadStatus(null), 4000);
+
+        window.dispatchEvent(new CustomEvent("photo-moved"));
+        await fetchPhotos();
+      } catch (err: any) {
+        console.error("[AlbumBulkAssign] Fallo al actualizar en Supabase:", err);
+        setUploadStatus({ type: "error", message: `Error al asignar álbumes: ${err?.message || String(err)}` });
+        setTimeout(() => setUploadStatus(null), 5000);
+      }
+    } else {
+      // MODO LOCAL: LocalStorage
+      const mappingsJson = localStorage.getItem("family_album_photo_mappings") || "{}";
+      const mappings = JSON.parse(mappingsJson);
+      selectedPhotos.forEach(photoName => {
+        mappings[photoName] = albumId;
+      });
+      localStorage.setItem("family_album_photo_mappings", JSON.stringify(mappings));
+
+      const albumLabel = albumId ? albums.find(a => a.id === albumId)?.name || "álbum" : "";
+      setUploadStatus({ 
+        type: "success", 
+        message: albumId 
+          ? `Se han añadido ${selectedPhotos.size} fotos a "${albumLabel}" (Modo Local)` 
+          : `Se han quitado ${selectedPhotos.size} fotos del álbum (Modo Local)` 
+      });
+      setTimeout(() => setUploadStatus(null), 4000);
+
+      window.dispatchEvent(new CustomEvent("photo-moved"));
+      setPhotos((prev) =>
+        prev.map((photo) =>
+          selectedPhotos.has(photo.name) ? { ...photo, album_id: albumId } : photo
+        )
+      );
+    }
+
+    setSelectedPhotos(new Set());
+    setIsSelectMode(false);
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       const target = event.target as HTMLElement;
@@ -256,6 +343,13 @@ export default function PhotosPage() {
         !target.closest("[data-album-dropdown]")
       ) {
         setOpenAlbumDropdownPhoto(null);
+      }
+      if (
+        target &&
+        !target.closest("[data-bulk-album-trigger]") &&
+        !target.closest("[data-bulk-album-dropdown]")
+      ) {
+        setShowBulkAlbumDropdown(false);
       }
       if (target && !target.closest("[data-photo-card]")) {
         setActiveActionMenuPhoto(null);
@@ -1006,15 +1100,58 @@ export default function PhotosPage() {
                   {selectedPhotos.size} seleccionada{selectedPhotos.size !== 1 ? "s" : ""}
                 </span>
                 {selectedPhotos.size > 0 && (
-                  <button
-                    onClick={moveSelectedToTrash}
-                    className="flex items-center gap-1.5 px-3 py-1.5 border border-red-400 text-red-600 hover:bg-red-50 rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Mover a papelera
-                  </button>
+                  <>
+                    <button
+                      onClick={moveSelectedToTrash}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-red-400 text-red-600 hover:bg-red-50 rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Mover a papelera
+                    </button>
+
+                    {/* Mover a Álbum en Lote */}
+                    <div className="relative bg-transparent" data-bulk-album-dropdown-container>
+                      <button
+                        data-bulk-album-trigger
+                        onClick={() => setShowBulkAlbumDropdown(!showBulkAlbumDropdown)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-brand-navy/20 hover:bg-brand-navy/5 text-brand-navy rounded-xs text-[11px] font-semibold transition-all cursor-pointer"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                        Mover a álbum...
+                      </button>
+                      
+                      {showBulkAlbumDropdown && (
+                        <div 
+                          data-bulk-album-dropdown
+                          className="absolute right-0 mt-1 w-48 bg-brand-cream border border-brand-navy/20 rounded-xs shadow-lg py-1 z-50 animate-in fade-in duration-100 max-h-56 overflow-y-auto scrollbar-thin"
+                        >
+                          <div className="px-3 py-1.5 border-b border-brand-navy/10 text-[9px] font-bold text-brand-navy/40 uppercase tracking-wider select-none">
+                            Selecciona un álbum
+                          </div>
+                          {albums.map((album) => (
+                            <button
+                              key={album.id}
+                              onClick={() => moveSelectedToAlbum(album.id)}
+                              className="w-full text-left px-3 py-1.5 text-xs text-brand-navy hover:bg-brand-navy/5 transition-colors cursor-pointer truncate font-medium flex items-center gap-2"
+                            >
+                              <span className="text-xs">📁</span> {album.name}
+                            </button>
+                          ))}
+                          <div className="border-t border-brand-navy/10 my-1"></div>
+                          <button
+                            onClick={() => moveSelectedToAlbum(null)}
+                            className="w-full text-left px-3 py-1.5 text-xs text-red-650 hover:bg-red-50 transition-colors cursor-pointer font-medium flex items-center gap-2"
+                          >
+                            <span className="text-xs">❌</span> Quitar del álbum
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
                 <button
                   onClick={() => { setIsSelectMode(false); setSelectedPhotos(new Set()); }}
